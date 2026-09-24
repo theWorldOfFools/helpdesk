@@ -15,10 +15,9 @@ if (($apiUser['role'] ?? '') === 'pelapor') {
     $conds[] = 'cr.user_id = $' . count($params);
 }
 
-$search = trim($_GET['search'] ?? '');
-if ($search === '' && isset($_GET['search']['value'])) {
-    $search = trim((string)$_GET['search']['value']);
-}
+$searchRaw = $_GET['search'] ?? '';
+if (is_array($searchRaw)) $searchRaw = $searchRaw['value'] ?? '';
+$search = trim((string)$searchRaw);
 $filterStatus = trim($_GET['filter_status'] ?? '');
 $filterPriority = trim($_GET['filter_priority'] ?? '');
 $filterAplikasi = trim($_GET['aplikasi'] ?? '');

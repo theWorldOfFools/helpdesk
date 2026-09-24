@@ -10,11 +10,9 @@ $conds = ['1=1'];
 $params = [];
 apiTicketScope($conds, $params, $apiUser, 't');
 
-$search = trim($_GET['search'] ?? '');
-// DataTables global search: search[value]
-if ($search === '' && isset($_GET['search']['value'])) {
-    $search = trim((string)$_GET['search']['value']);
-}
+$searchRaw = $_GET['search'] ?? '';
+if (is_array($searchRaw)) $searchRaw = $searchRaw['value'] ?? '';
+$search = trim((string)$searchRaw);
 $filterStatus = trim($_GET['filter_status'] ?? '');
 $filterPriority = trim($_GET['filter_priority'] ?? '');
 $filterDivision = trim($_GET['filter_division'] ?? '');

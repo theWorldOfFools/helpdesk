@@ -7,10 +7,10 @@ if (($apiUser['role'] ?? '') !== 'admin') {
 }
 
 $conn = getDBConnection();
-$search = trim($_GET['search'] ?? '');
-if ($search === '' && isset($_GET['search']['value'])) {
-    $search = trim((string)$_GET['search']['value']);
-}
+// DataTables global search: search[value] (array) atau search string (custom/Kendo)
+$searchRaw = $_GET['search'] ?? '';
+if (is_array($searchRaw)) $searchRaw = $searchRaw['value'] ?? '';
+$search = trim((string)$searchRaw);
 $conds = ['1=1'];
 $params = [];
 if ($search !== '') {
