@@ -314,6 +314,7 @@
               if (!isSimrs) {
                 h += ' <form method="POST" class="d-inline" onsubmit="return confirm(\'Reset password pengguna ini ke acak sementara?\')">' + csrfH + '<input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="' + esc(row.id) + '"><button type="submit" class="btn btn-sm btn-outline-secondary" ' + dis + '>Reset PW</button></form>';
               }
+              h += ' <a class="btn btn-sm btn-outline-secondary" href="edit_user.php?id=' + esc(row.id) + '">Edit</a>';
               return h;
             }
           }

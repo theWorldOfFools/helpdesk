@@ -127,6 +127,11 @@ Setelah instalasi, login dengan akun default:
 | teknisi1 | admin123 | Teknisi |
 | pelapor1 | admin123 | Pelapor |
 
+> Keamanan: kredensial demo hanya didokumentasikan di sini dan **tidak ditampilkan**
+> di halaman login. Segera ganti password default setelah instalasi
+> (via menu Profil, atau reset oleh admin) dan nonaktifkan akun demo
+> yang tidak dipakai via menu Kelola Pengguna.
+
 ### 5. Jalankan Aplikasi
 
 Jika menggunakan PHP built-in server:
@@ -162,6 +167,7 @@ helpdesk/
 ├── ticket_action.php       # Backend tindak lanjut (fleksibel + wajib catatan)
 ├── dashboard.php           # Dashboard per-role + Chart.js + leaderboard bulanan
 ├── user_management.php     # Kelola pengguna + reset PW + log aktivitas (admin)
+├── edit_user.php           # Edit nama/divisi/role + hapus pengguna (admin, guard data tertaut)
 ├── profile.php             # Profil + ganti password (semua role)
 ├── kb.php                  # Basis solusi (semua role)
 ├── kb_manage.php           # Kelola artikel + template jawaban (admin/teknisi)

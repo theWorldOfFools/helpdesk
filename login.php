@@ -277,28 +277,6 @@ pg_close($conn);
                         </button>
                     </form>
 
-                    <div class="d-flex align-items-center gap-2 my-4 text-secondary small text-uppercase"><hr class="flex-grow-1"><span>Akun demo — klik untuk isi</span><hr class="flex-grow-1"></div>
-                    <div class="row g-2">
-                        <div class="col-4">
-                            <button type="button" class="btn btn-outline-secondary w-100 demo-chip" data-user="admin" data-pass="admin123">
-                                <strong class="d-block small"><span class="badge bg-danger me-1">&nbsp;</span>Admin</strong>
-                                <span class="small text-secondary">admin / admin123</span>
-                            </button>
-                        </div>
-                        <div class="col-4">
-                            <button type="button" class="btn btn-outline-secondary w-100 demo-chip" data-user="teknisi1" data-pass="admin123">
-                                <strong class="d-block small"><span class="badge bg-primary me-1">&nbsp;</span>Teknisi</strong>
-                                <span class="small text-secondary">teknisi1 / admin123</span>
-                            </button>
-                        </div>
-                        <div class="col-4">
-                            <button type="button" class="btn btn-outline-secondary w-100 demo-chip" data-user="pelapor1" data-pass="admin123">
-                                <strong class="d-block small"><span class="badge bg-success me-1">&nbsp;</span>Pelapor</strong>
-                                <span class="small text-secondary">pelapor1 / admin123</span>
-                            </button>
-                        </div>
-                    </div>
-
                     <div class="alert alert-light border mt-3 small text-secondary mb-0">
                         Setelah login kamu diarahkan otomatis:<br>
                         <strong>Admin</strong> → Dashboard &nbsp;·&nbsp; <strong>Teknisi</strong> → Daftar Tiket &nbsp;·&nbsp; <strong>Pelapor</strong> → Buat Tiket
@@ -326,14 +304,6 @@ pg_close($conn);
                     pass.focus();
                 });
             }
-            var userInput = document.getElementById('username');
-            document.querySelectorAll('.demo-chip').forEach(function (chip) {
-                chip.addEventListener('click', function () {
-                    userInput.value = chip.getAttribute('data-user');
-                    pass.value = chip.getAttribute('data-pass');
-                    userInput.focus();
-                });
-            });
             var firstInput = document.getElementById('username');
             if (firstInput && !firstInput.value) firstInput.focus();
         })();

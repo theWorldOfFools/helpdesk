@@ -14,6 +14,11 @@ if ($flash) {
     $message = $flash;
     $messageType = 'danger';
 }
+$deleted = trim($_GET['deleted'] ?? '');
+if ($deleted !== '' && $message === '') {
+    $message = 'Pengguna ' . $deleted . ' berhasil dihapus permanen.';
+    $messageType = 'success';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrf();
@@ -206,6 +211,7 @@ if ($alr) {
                     <td><?php echo htmlspecialchars($u['division'] ?? '-'); ?></td>
                     <td><?php if ($u['is_active'] === 't' || $u['is_active'] == 1 || $u['is_active'] === true): ?><span class="badge text-bg-success">Ya</span><?php else: ?><span class="badge text-bg-secondary">Tidak</span><?php endif; ?></td>
                     <td>
+                        <a href="edit_user.php?id=<?php echo $u['id']; ?>" class="btn btn-sm btn-outline-secondary">Edit</a>
                         <form method="POST" class="d-inline">
                             <?php echo csrf_field(); ?>
                             <input type="hidden" name="action" value="toggle">
