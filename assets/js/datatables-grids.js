@@ -277,6 +277,10 @@
     if ($users.length) {
       $('#tbl-users-fallback').hide();
       $users.show();
+      var csrfTok = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      var myId = (document.querySelector('meta[name="user-id"]') || {}).content || '';
+      var csrfH = '<input type="hidden" name="csrf_token" value="' + esc(csrfTok) + '">';
+      var roleOpts = ['admin', 'teknisi', 'pelapor'];
       $users.DataTable({
         serverSide: true,
         processing: true,
@@ -289,11 +293,30 @@
         },
         order: [[1, 'asc']],
         columns: [
-          { data: 'username', title: 'Username', render: function (d, t) { return t !== 'display' ? d : '<strong>' + esc(d) + '</strong>'; } },
+          { data: 'username', title: 'Username', render: function (d, t, row) { return t !== 'display' ? d : '<strong>' + esc(d) + '</strong>' + (row && row.auth_source === 'simrs' ? ' <span class="badge text-bg-info" title="Akun dari SIMRS">SIMRS</span>' : ''); } },
           { data: 'name', title: 'Nama', render: function (d, t) { return t !== 'display' ? d : esc(d); } },
           { data: 'role', title: 'Role', render: function (d, t) { return t !== 'display' ? d : '<span class="status-badge status-' + esc(d) + '">' + esc(d) + '</span>'; } },
           { data: 'division', title: 'Divisi', render: function (d, t) { return t !== 'display' ? d : esc(d || '-'); } },
-          { data: 'is_active', title: 'Aktif', orderable: false, render: function (d, t) { return t !== 'display' ? d : (d ? '<span class="badge text-bg-success">Ya</span>' : '<span class="badge text-bg-secondary">Tidak</span>'); } }
+          { data: 'is_active', title: 'Aktif', orderable: false, render: function (d, t) { return t !== 'display' ? d : (d ? '<span class="badge text-bg-success">Ya</span>' : '<span class="badge text-bg-secondary">Tidak</span>'); } },
+          {
+            data: null, title: 'Aksi', orderable: false, searchable: false, render: function (d, t, row) {
+              if (t !== 'display' || !row) return '';
+              var self = String(row.id) === String(myId);
+              var dis = self ? 'disabled title="Akun sendiri"' : '';
+              var isSimrs = row.auth_source === 'simrs';
+              var h = '';
+              h += '<form method="POST" class="d-inline" onsubmit="return confirm(\'Nonaktifkan/mengaktifkan pengguna ini?\')">' + csrfH + '<input type="hidden" name="action" value="toggle"><input type="hidden" name="user_id" value="' + esc(row.id) + '"><button type="submit" class="btn btn-sm btn-warning" ' + dis + '>' + (row.is_active ? 'Nonaktifkan' : 'Aktifkan') + '</button></form> ';
+              h += '<form method="POST" class="d-inline" onsubmit="return confirm(\'Ubah role pengguna ini?\')">' + csrfH + '<input type="hidden" name="action" value="role"><input type="hidden" name="user_id" value="' + esc(row.id) + '"><select name="role" class="form-select form-select-sm d-inline-block w-auto align-middle" aria-label="Role baru">';
+              for (var i = 0; i < roleOpts.length; i++) {
+                h += '<option value="' + roleOpts[i] + '"' + (row.role === roleOpts[i] ? ' selected' : '') + '>' + roleOpts[i] + '</option>';
+              }
+              h += '</select> <button type="submit" class="btn btn-sm btn-outline-primary" ' + dis + '>Set Role</button></form>';
+              if (!isSimrs) {
+                h += ' <form method="POST" class="d-inline" onsubmit="return confirm(\'Reset password pengguna ini ke acak sementara?\')">' + csrfH + '<input type="hidden" name="action" value="reset"><input type="hidden" name="user_id" value="' + esc(row.id) + '"><button type="submit" class="btn btn-sm btn-outline-secondary" ' + dis + '>Reset PW</button></form>';
+              }
+              return h;
+            }
+          }
         ]
       });
     }

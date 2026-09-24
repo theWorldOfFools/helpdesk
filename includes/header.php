@@ -50,6 +50,8 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <?php endif; ?>
     <?php if (!empty($currentUser)): ?><meta name="user-role" content="<?php echo htmlspecialchars($currentRole ?? ''); ?>"><?php endif; ?>
+    <?php if (!empty($currentUser)): ?><meta name="user-id" content="<?php echo (int)$currentUser['id']; ?>"><?php endif; ?>
+    <?php if (!empty($currentUser)): ?><meta name="csrf-token" content="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>"><?php endif; ?>
 </head>
 <body class="bg-body-tertiary"<?php if (!empty($currentUser)) echo ' data-role="' . htmlspecialchars($currentRole ?? '') . '"'; ?>>
 <?php if ($currentUser): ?>

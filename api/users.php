@@ -38,7 +38,7 @@ if ($cntR) pg_free_result($cntR);
 $dataParams = array_merge($params, [$take, $skip]);
 $limN = count($params) + 1;
 $offN = count($params) + 2;
-$res = pg_query_params($conn, "SELECT id, username, name, role, division, is_active, created_at FROM users WHERE $where ORDER BY $orderBy LIMIT \$$limN OFFSET \$$offN", $dataParams);
+$res = pg_query_params($conn, "SELECT id, username, name, role, division, is_active, auth_source, created_at FROM users WHERE $where ORDER BY $orderBy LIMIT \$$limN OFFSET \$$offN", $dataParams);
 $rows = [];
 if ($res) {
     while ($r = pg_fetch_assoc($res)) {
