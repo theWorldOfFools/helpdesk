@@ -90,7 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$divisions = ['IT Infrastructure', 'IT Development', 'IT Support', 'IT Security', 'Network', 'System Administration'];
+// Daftar divisi dari master (divisi.php); fallback bawaan bila tabel belum ada
+$divisions = getActiveDivisions($conn);
 $categories = ['Hardware', 'Software', 'Jaringan', 'Lainnya'];
 $priorities = ['low', 'medium', 'high', 'critical'];
 ?>

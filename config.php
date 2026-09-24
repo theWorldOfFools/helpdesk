@@ -90,6 +90,30 @@ function hashPassword($password)
     return password_hash($password, PASSWORD_BCRYPT);
 }
 
+function getActiveDivisions($conn = null)
+{
+    // Daftar divisi master (tabel divisions, hanya yang aktif).
+    // Fallback ke daftar bawaan bila tabel belum dimigrasi (migrasi 014).
+    $fallback = ['IT Infrastructure', 'IT Development', 'IT Support', 'IT Security', 'Network', 'System Administration'];
+    $own = $conn === null;
+    try {
+        if ($own) $conn = getDBConnection();
+        $r = @pg_query($conn, "SELECT name FROM divisions WHERE is_active = TRUE ORDER BY name ASC");
+        if ($r && pg_num_rows($r) > 0) {
+            $out = [];
+            while ($row = pg_fetch_assoc($r)) $out[] = $row['name'];
+            pg_free_result($r);
+            if ($own) pg_close($conn);
+            return $out;
+        }
+        if ($r) pg_free_result($r);
+        if ($own) pg_close($conn);
+    } catch (Throwable $e) {
+        // abaikan: pakai fallback
+    }
+    return $fallback;
+}
+
 function verifyPassword($password, $hash)
 {
     return password_verify($password, $hash);

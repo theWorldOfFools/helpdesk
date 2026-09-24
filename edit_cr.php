@@ -59,7 +59,10 @@ if ($ur) {
 $message = '';
 $messageType = '';
 
-$divisions = ['IT Infrastructure', 'IT Development', 'IT Support', 'IT Security', 'Network', 'System Administration'];
+// Daftar divisi master untuk field Unit (divisi.php); fallback bawaan bila tabel belum ada
+$divisions = getActiveDivisions($conn);
+// Nilai lama yang mungkin sudah nonaktif tetap boleh disimpan ulang
+if (!empty($cr['unit']) && !in_array($cr['unit'], $divisions, true)) $divisions[] = $cr['unit'];
 $priorities = ['low', 'medium', 'high', 'critical'];
 $statuses = ['open', 'in_progress', 'resolved', 'closed'];
 $allowedJenis = ['Penambahan', 'Perubahan', 'Design'];

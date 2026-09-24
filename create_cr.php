@@ -35,8 +35,8 @@ $old = [
     'report_for' => $user['id'],
 ];
 
-// Reuse daftar divisi dari create_ticket.php untuk field Unit
-$divisions = ['IT Infrastructure', 'IT Development', 'IT Support', 'IT Security', 'Network', 'System Administration'];
+// Daftar divisi master untuk field Unit (divisi.php); fallback bawaan bila tabel belum ada
+$divisions = getActiveDivisions($conn);
 $priorities = ['low', 'medium', 'high', 'critical'];
 // Task 5a32787a: enum jenis perubahan (mirror CHECK di migrasi 011). Tidak perlu migrasi baru.
 $allowedJenis = ['Penambahan', 'Perubahan', 'Design'];

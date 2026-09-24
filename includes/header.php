@@ -111,7 +111,7 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="user_management.php" class="nav-link side-link<?php echo side_link_active('user_management.php', $activePage); ?>">
                         <i class="bi bi-people"></i> Kelola Pengguna
                     </a>
-                    <a href="dashboard.php#divisi" class="nav-link side-link">
+                    <a href="divisi.php" class="nav-link side-link<?php echo side_link_active(['divisi.php'], $activePage); ?>">
                         <i class="bi bi-building"></i> Data Divisi
                     </a>
 
