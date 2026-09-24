@@ -21,6 +21,10 @@ Sistem tiket online untuk mencatat dan memantau operasional divisi IT dengan sis
 | Lihat Semua Tiket | ✅ | ✅ | ❌ (Own only) |
 | Edit Tiket | ✅ | ✅ | ❌ |
 | Hapus Tiket | ✅ | ❌ | ❌ |
+| Buat CR | ✅ | ✅ | ✅ |
+| Lihat Semua CR | ✅ | ✅ | ❌ (Own only) |
+| Edit/Hapus CR | ✅ | ❌ | ❌ |
+| Tindak Lanjut CR | ✅ | ✅ | 💬 (Komentar own only) |
 | Dashboard Penuh | ✅ | ✅ | ✅ (Own only) |
 | Kelola User | ✅ | ❌ | ❌ |
 
@@ -96,10 +100,11 @@ psql -U postgres -d helpdesk_db -f migrations/008_account.sql
 psql -U postgres -d helpdesk_db -f migrations/009_kb.sql
 psql -U postgres -d helpdesk_db -f migrations/010_settings_notifications.sql
 psql -U postgres -d helpdesk_db -f migrations/011_change_requests.sql
+psql -U postgres -d helpdesk_db -f migrations/012_change_request_comments.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→011 dari schema kosong.
-> `011_change_requests.sql` idempoten (`IF NOT EXISTS`) sehingga aman
+> Catatan: migrasi wajib dijalankan berurutan 001→012 dari schema kosong.
+> `011_change_requests.sql` dan `012_change_request_comments.sql` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
 > `uploads/change_requests/` writable.
@@ -143,7 +148,12 @@ helpdesk/
 ├── logout.php              # Logout
 ├── index.php               # Daftar tiket (DataTables server-side + fallback PHP)
 ├── create_ticket.php       # Form tambah tiket
-├── create_cr.php           # Form header Change Request (fondasi; detail menyusul)
+├── create_cr.php           # Form Change Request (header + tabel dinamis Jenis Perubahan)
+├── cr_list.php             # Daftar CR terpisah (filter + kartu status + DataTables + fallback PHP)
+├── view_cr.php             # Detail CR + Tindak Lanjut (tombol aksi) + diskusi/riwayat
+├── edit_cr.php             # Edit CR (admin only, termasuk rincian item)
+├── delete_cr.php           # Hapus CR via POST+CSRF (admin only)
+├── cr_action.php           # Backend tindak lanjut CR (fleksibel + wajib catatan)
 ├── view_ticket.php         # Detail + Tindak Lanjut (tombol aksi) + diskusi/riwayat
 ├── edit_ticket.php         # Edit data (admin only)
 ├── delete_ticket.php       # Hapus tiket via POST+CSRF (admin only)
@@ -157,6 +167,7 @@ helpdesk/
 ├── manifest.json + sw.js     # PWA dasar (instalable, cache aset statis)
 ├── api/
 │   ├── tickets.php         # DataSource DataTables tiket (server paging/sort/filter)
+│   ├── crs.php             # DataSource DataTables CR (server paging/sort/filter)
 │   ├── users.php           # DataSource Grid users (admin)
 │   ├── dashboard.php       # JSON chart + leaderboard (trend/status/workload)
 │   └── reports.php         # JSON laporan (kpi/trend/sla_response/sla_resolution/breach)
@@ -174,7 +185,8 @@ helpdesk/
 │   ├── 008_account.sql          # remember_token, must_change_password, activity_log
 │   ├── 009_kb.sql               # kb_articles + kb_templates (seed)
 │   ├── 010_settings_notifications.sql # settings target SLA + notifications
-│   └── 011_change_requests.sql  # change_requests + items + history (fondasi header CR)
+│   ├── 011_change_requests.sql  # change_requests + items + history (header + rincian CR)
+│   └── 012_change_request_comments.sql # change_request_comments (diskusi CR)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
 │   ├── cr_auth.php         # Helper CR: generateCrNumber/canViewCr/canActOnCr/upload
@@ -195,9 +207,9 @@ helpdesk/
 
 Sistem menggunakan 3 role:
 
-- **Administrator**: Akses penuh + Edit data + semua aksi + manajemen pengguna + hapus tiket
-- **Teknisi**: Tindak lanjut via tombol aksi (fleksibel open↔in_progress↔resolved↔closed, wajib catatan), tanpa Edit data
-- **Pelapor**: Buat tiket + lihat/komentar tiket sendiri saja
+- **Administrator**: Akses penuh + Edit data + semua aksi + manajemen pengguna + hapus tiket/CR
+- **Teknisi**: Tindak lanjut tiket/CR via tombol aksi (fleksibel open↔in_progress↔resolved↔closed, wajib catatan), tanpa Edit data
+- **Pelapor**: Buat tiket/CR + lihat/komentar tiket/CR sendiri saja
 
 ## Fitur Baru
 
@@ -212,6 +224,7 @@ Sistem menggunakan 3 role:
 - PWA dasar: manifest + ikon + service worker (cache aset statis)
 - DataTables server-side di semua tabel (fallback PHP bila CDN offline)
 - Dashboard Chart.js per-role + leaderboard teknisi (skor cepat+banyak) & pelapor (bulanan)
+- Change Request end-to-end (terpisah dari tiket): buat + tabel dinamis Jenis Perubahan (Penambahan/Perubahan/Design, 1–20 baris), daftar + API server-side, detail + tindak lanjut + diskusi/riwayat, edit/hapus admin, nomor CR-YYYYMM-XXXX anti-race, SLA jam kerja, notifikasi, widget dashboard + laporan + export
 - Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
 
 ### Menambah Pengguna Baru
