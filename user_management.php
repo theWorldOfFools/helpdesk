@@ -68,6 +68,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = 'Status pengguna diperbarui!';
             $messageType = 'success';
         }
+    } elseif (isset($_POST['action']) && $_POST['action'] === 'role') {
+        $id = (int)($_POST['user_id'] ?? 0);
+        $newRole = trim($_POST['role'] ?? '');
+        $validRoles = ['admin', 'teknisi', 'pelapor'];
+        if ($id <= 0 || !in_array($newRole, $validRoles, true)) {
+            $message = 'ID pengguna atau role tidak valid.';
+            $messageType = 'danger';
+        } elseif ($id === (int)$user['id']) {
+            $message = 'Tidak bisa mengubah role akun sendiri (cegah terkunci)!';
+            $messageType = 'danger';
+        } else {
+            $chk = pg_query_params($conn, "SELECT username, role FROM users WHERE id = $1", [$id]);
+            if (!$chk || pg_num_rows($chk) === 0) {
+                $message = 'Pengguna tidak ditemukan.';
+                $messageType = 'danger';
+            } else {
+                $urow = pg_fetch_assoc($chk);
+                pg_query_params($conn, "UPDATE users SET role = $1 WHERE id = $2", [$newRole, $id]);
+                logActivity($conn, $user['id'], 'user_role', 'Ubah role ' . $urow['username'] . ' ' . $urow['role'] . ' → ' . $newRole);
+                $message = 'Role ' . $urow['username'] . ' diubah menjadi ' . $newRole . '!';
+                $messageType = 'success';
+            }
+            if (isset($chk) && $chk) pg_free_result($chk);
+        }
     } elseif (isset($_POST['action']) && $_POST['action'] === 'reset') {
         $id = (int)($_POST['user_id'] ?? 0);
         if ($id <= 0) {
@@ -174,8 +198,9 @@ if ($alr) {
         </thead>
         <tbody class="table-group-divider">
             <?php while ($u = pg_fetch_assoc($usersResult)): ?>
+                <?php $isSimrs = (($u['auth_source'] ?? 'local') === 'simrs'); ?>
                 <tr>
-                    <td><strong><?php echo htmlspecialchars($u['username']); ?></strong></td>
+                    <td><strong><?php echo htmlspecialchars($u['username']); ?></strong><?php if ($isSimrs): ?> <span class="badge text-bg-info" title="Akun dari SIMRS — password dikelola di SIMRS">SIMRS</span><?php endif; ?></td>
                     <td><?php echo htmlspecialchars($u['name']); ?></td>
                     <td><span class="status-badge status-<?php echo $u['role']; ?>"><?php echo htmlspecialchars($u['role']); ?></span></td>
                     <td><?php echo htmlspecialchars($u['division'] ?? '-'); ?></td>
@@ -189,12 +214,25 @@ if ($alr) {
                                 <?php echo ($u['is_active'] === 't' || $u['is_active'] == 1 || $u['is_active'] === true) ? 'Nonaktifkan' : 'Aktifkan'; ?>
                             </button>
                         </form>
+                        <form method="POST" class="d-inline" onsubmit="return confirm('Ubah role pengguna ini?')">
+                            <?php echo csrf_field(); ?>
+                            <input type="hidden" name="action" value="role">
+                            <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                            <select name="role" class="form-select form-select-sm d-inline-block w-auto align-middle" aria-label="Role baru">
+                                <?php foreach (['admin', 'teknisi', 'pelapor'] as $rr): ?>
+                                    <option value="<?php echo $rr; ?>" <?php echo $u['role'] === $rr ? 'selected' : ''; ?>><?php echo $rr; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-outline-primary" <?php echo ((int)$u['id'] === (int)$user['id']) ? 'disabled title="Akun sendiri"' : ''; ?>>Set Role</button>
+                        </form>
+                        <?php if (!$isSimrs): ?>
                         <form method="POST" class="d-inline" onsubmit="return confirm('Reset password pengguna ini ke acak sementara?')">
                             <?php echo csrf_field(); ?>
                             <input type="hidden" name="action" value="reset">
                             <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
                             <button type="submit" class="btn btn-sm btn-outline-secondary" <?php echo ((int)$u['id'] === (int)$user['id']) ? 'disabled title="Akun sendiri"' : ''; ?>>Reset PW</button>
                         </form>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endwhile; ?>

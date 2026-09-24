@@ -12,11 +12,16 @@ $messageType = '';
 $force = isset($_GET['force']) && $_GET['force'] === '1';
 $warn = $_SESSION['flash_warn'] ?? null;
 unset($_SESSION['flash_warn']);
+// Akun SIMRS: profil + password mengikuti DB SIMRS (read-only di helpdesk)
+$isSimrsUser = (($user['auth_source'] ?? 'local') === 'simrs');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrf();
     $act = $_POST['act'] ?? '';
-    if ($act === 'info') {
+    if ($isSimrsUser) {
+        $message = 'Akun SIMRS: nama, divisi, dan password mengikuti data SIMRS dan tidak bisa diubah di sini.';
+        $messageType = 'info';
+    } elseif ($act === 'info') {
         $name = trim($_POST['name'] ?? '');
         $division = trim($_POST['division'] ?? '');
         if ($name === '') {
@@ -86,6 +91,7 @@ if ($lr) {
 <div class="row g-3">
     <div class="col-lg-6"><div class="card h-100"><div class="card-body">
         <h3 class="h6">Data Diri</h3>
+        <?php if ($isSimrsUser): ?><div class="alert alert-info small py-2">Akun SIMRS — nama & divisi disinkron dari SIMRS setiap login.</div><?php endif; ?>
         <form method="POST">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="act" value="info">
@@ -98,6 +104,9 @@ if ($lr) {
     </div></div></div>
     <div class="col-lg-6"><div class="card h-100"><div class="card-body">
         <h3 class="h6">Ganti Password</h3>
+        <?php if ($isSimrsUser): ?>
+            <div class="alert alert-info mb-0 small">Akun Anda dari SIMRS — password diganti di aplikasi SIMRS, bukan di sini. Login helpdesk otomatis mengikuti password SIMRS terbaru.</div>
+        <?php else: ?>
         <form method="POST" autocomplete="off">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="act" value="password">
@@ -106,6 +115,7 @@ if ($lr) {
             <div class="mb-3"><label class="form-label" for="pfConf">Konfirmasi Baru</label><input type="password" class="form-control" id="pfConf" name="confirm_password" required minlength="8" autocomplete="new-password"></div>
             <button class="btn btn-warning" type="submit">Ganti Password</button>
         </form>
+        <?php endif; ?>
     </div></div></div>
 </div>
 

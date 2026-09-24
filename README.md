@@ -72,6 +72,7 @@ cd helpdesk
 ```bash
 cp .env.example .env
 # sesuaikan DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS
+# opsional SIMRS: SIMRS_DB_NAME/SIMRS_SECKEY/SIMRS_AUTH_ENABLED (lihat "Login via SIMRS")
 ```
 
 ### 3. Konfigurasi Database
@@ -101,10 +102,11 @@ psql -U postgres -d helpdesk_db -f migrations/009_kb.sql
 psql -U postgres -d helpdesk_db -f migrations/010_settings_notifications.sql
 psql -U postgres -d helpdesk_db -f migrations/011_change_requests.sql
 psql -U postgres -d helpdesk_db -f migrations/012_change_request_comments.sql
+psql -U postgres -d helpdesk_db -f migrations/013_simrs_auth.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→012 dari schema kosong.
-> `011_change_requests.sql` dan `012_change_request_comments.sql` idempoten (`IF NOT EXISTS`) sehingga aman
+> Catatan: migrasi wajib dijalankan berurutan 001→013 dari schema kosong.
+> `011`, `012`, `013` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
 > `uploads/change_requests/` writable.
@@ -144,7 +146,7 @@ Atau konfigurasi virtual host di Apache/Nginx dengan document root ke `/var/www/
 helpdesk/
 ├── README.md
 ├── config.php              # Koneksi database PostgreSQL & auth functions
-├── login.php               # Halaman login
+├── login.php               # Halaman login (lokal + via SIMRS bila SIMRS_AUTH_ENABLED=true)
 ├── logout.php              # Logout
 ├── index.php               # Daftar tiket (DataTables server-side + fallback PHP)
 ├── create_ticket.php       # Form tambah tiket
@@ -186,9 +188,11 @@ helpdesk/
 │   ├── 009_kb.sql               # kb_articles + kb_templates (seed)
 │   ├── 010_settings_notifications.sql # settings target SLA + notifications
 │   ├── 011_change_requests.sql  # change_requests + items + history (header + rincian CR)
-│   └── 012_change_request_comments.sql # change_request_comments (diskusi CR)
+│   ├── 012_change_request_comments.sql # change_request_comments (diskusi CR)
+│   └── 013_simrs_auth.sql       # auth_source/external_id/jabatan/unit_kerja (login SIMRS)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
+│   ├── simrs_auth.php      # Helper SIMRS: koneksi read-only, verify HMAC+bcrypt, profil pegawai
 │   ├── cr_auth.php         # Helper CR: generateCrNumber/canViewCr/canActOnCr/upload
 │   ├── csrf.php            # CSRF token/verify
 │   ├── env.php             # Loader .env minimal
@@ -211,6 +215,20 @@ Sistem menggunakan 3 role:
 - **Teknisi**: Tindak lanjut tiket/CR via tombol aksi (fleksibel open↔in_progress↔resolved↔closed, wajib catatan), tanpa Edit data
 - **Pelapor**: Buat tiket/CR + lihat/komentar tiket/CR sendiri saja
 
+## Login via SIMRS (opsional)
+
+Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-only):
+
+1. Migrasi `013_simrs_auth.sql`, lalu isi `.env`:
+   `SIMRS_DB_NAME` (cth `db_rswb_dummy`), `SIMRS_SECKEY` (Yii seckey SIMRS, wajib, jangan di-commit),
+   opsional `SIMRS_DB_HOST/PORT/USER/PASS` (kosong = ikut `DB_*`).
+2. Set `SIMRS_AUTH_ENABLED=true` setelah uji login 1 akun berhasil.
+3. Perilaku: username yang ada di `loginpemakai_k` diverifikasi live (HMAC-SHA256 + bcrypt);
+   sukses = dibuatkan baris `users` lokal otomatis sebagai **pelapor** (nama/divisi dari
+   pegawai+ruangan, refresh tiap login, role tidak pernah ditimpa). Promosi admin/teknisi
+   manual via Manajemen Pengguna (aksi Set Role). Profil & password user SIMRS ikut SIMRS.
+   Akun lokal (mis. admin darurat) tetap bisa login seperti biasa.
+
 ## Fitur Baru
 
 - Tindak lanjut terpisah dari Edit (`ticket_action.php`), audit `ticket_history` + `ticket_comments`
@@ -225,6 +243,7 @@ Sistem menggunakan 3 role:
 - DataTables server-side di semua tabel (fallback PHP bila CDN offline)
 - Dashboard Chart.js per-role + leaderboard teknisi (skor cepat+banyak) & pelapor (bulanan)
 - Change Request end-to-end (terpisah dari tiket): buat + tabel dinamis Jenis Perubahan (Penambahan/Perubahan/Design, 1–20 baris), daftar + API server-side, detail + tindak lanjut + diskusi/riwayat, edit/hapus admin, nomor CR-YYYYMM-XXXX anti-race, SLA jam kerja, notifikasi, widget dashboard + laporan + export
+- Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, profil/password ikut SIMRS
 - Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
 
 ### Menambah Pengguna Baru

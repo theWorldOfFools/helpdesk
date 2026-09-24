@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once 'includes/simrs_auth.php';
 
 $conn = getDBConnection();
 
@@ -42,11 +43,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($fails >= 5) {
             $message = 'Terlalu banyak percobaan gagal. Coba lagi dalam 5 menit.';
         } else {
+        // Auth via SIMRS bila flag aktif dan username terdaftar di SIMRS.
+        // SIMRS read-only + verify live; sukses = JIT ke users lokal (baru = pelapor,
+        // login ulang = refresh profil saja, role TIDAK ditimpa agar promosi manual aman).
+        $simrsRow = null;
+        if (simrsAuthEnabled()) {
+            $sconn = getSimrsConnection();
+            if ($sconn) {
+                $simrsRow = simrsFindUser($sconn, $usernameValue);
+                pg_close($sconn);
+            }
+        }
+        if ($simrsRow) {
+            if (!simrsIsActive($simrsRow)) {
+                pg_query_params($conn, "INSERT INTO login_attempts (ip, username, success) VALUES ($1,$2,FALSE)", [$ip, $usernameValue]);
+                $message = 'Akun SIMRS Anda sudah tidak aktif. Hubungi admin.';
+            } elseif (!simrsVerifyPassword($password, $simrsRow['nama_pemakai'], $simrsRow['katakunci_pemakai'])) {
+                pg_query_params($conn, "INSERT INTO login_attempts (ip, username, success) VALUES ($1,$2,FALSE)", [$ip, $usernameValue]);
+                $message = 'Username atau password salah!';
+            } else {
+                pg_query_params($conn, "INSERT INTO login_attempts (ip, username, success) VALUES ($1,$2,TRUE)", [$ip, $usernameValue]);
+                $display = simrsDisplayName($simrsRow);
+                if ($display === '') $display = $usernameValue;
+                $division = trim((string)($simrsRow['ruangan_nama'] ?? ''));
+                if ($division === '') $division = null;
+                $jabatan = trim((string)($simrsRow['jabatan_nama'] ?? ''));
+                if ($jabatan === '') $jabatan = null;
+                $extId = (int)($simrsRow['loginpemakai_id'] ?? 0);
+                if ($extId <= 0) $extId = null;
+                $isNew = false;
+                $local = pg_query_params($conn, "SELECT * FROM users WHERE username = $1", [$usernameValue]);
+                $user = ($local && pg_num_rows($local) > 0) ? pg_fetch_assoc($local) : null;
+                if ($local) pg_free_result($local);
+                if (!$user) {
+                    $ins = pg_query_params(
+                        $conn,
+                        "INSERT INTO users (username, password, name, role, division, auth_source, external_id, jabatan, unit_kerja, last_sync_at, is_active, must_change_password) VALUES ($1,NULL,$2,'pelapor',$3,'simrs',$4,$5,$6,NOW(),TRUE,FALSE) RETURNING *",
+                        [$usernameValue, $display, $division, $extId, $jabatan, $division]
+                    );
+                    $user = ($ins && pg_num_rows($ins) > 0) ? pg_fetch_assoc($ins) : null;
+                    if ($ins) pg_free_result($ins);
+                    if ($user) {
+                        $isNew = true;
+                        logActivity($conn, $user['id'], 'user_jit', 'JIT provisioning dari SIMRS (' . $usernameValue . ')');
+                    }
+                }
+                if (!$user) {
+                    $message = 'Gagal menyiapkan akun lokal. Hubungi admin.';
+                } elseif (($user['is_active'] === 'f' || $user['is_active'] == 0 || $user['is_active'] === false) && !$isNew) {
+                    $message = 'Akun Anda dinonaktifkan di helpdesk. Hubungi admin.';
+                } else {
+                    // Refresh profil dari SIMRS; role dipertahankan (promosi manual tidak ke-reset)
+                    pg_query_params(
+                        $conn,
+                        "UPDATE users SET name=$1, division=$2, jabatan=$3, unit_kerja=$4, external_id=$5, auth_source='simrs', last_sync_at=NOW() WHERE id=$6",
+                        [$display, $division, $jabatan, $division, $extId, $user['id']]
+                    );
+                    logActivity($conn, $user['id'], 'login_simrs', 'Login via SIMRS' . ($isNew ? ' (akun baru)' : ''));
+                    session_regenerate_id(true);
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['name'] = $display;
+                    if (!empty($_POST['remember'])) {
+                        $raw = bin2hex(random_bytes(32));
+                        pg_query_params($conn, "UPDATE users SET remember_token = $1 WHERE id = $2", [hash('sha256', $raw), $user['id']]);
+                        setcookie('hd_remember', $raw, time() + 30 * 86400, '/', '', !empty($_SERVER['HTTPS']), true);
+                    }
+                    pg_close($conn);
+                    // User SIMRS tidak lewat must_change_password (password milik SIMRS)
+                    switch ($user['role']) {
+                        case 'admin':
+                            header('Location: dashboard.php');
+                            break;
+                        case 'teknisi':
+                            header('Location: index.php');
+                            break;
+                        default:
+                            header('Location: create_ticket.php');
+                    }
+                    exit;
+                }
+            }
+        } else {
         $result = pg_query_params($conn, "SELECT * FROM users WHERE username = $1 AND is_active = TRUE", [$usernameValue]);
 
         if ($result && pg_num_rows($result) > 0) {
             $user = pg_fetch_assoc($result);
-            if (verifyPassword($password, $user['password'])) {
+            if (($user['auth_source'] ?? 'local') === 'simrs') {
+                // Baris cerminan SIMRS tanpa password lokal: selalu lewat flow SIMRS di atas.
+                pg_query_params($conn, "INSERT INTO login_attempts (ip, username, success) VALUES ($1,$2,FALSE)", [$ip, $usernameValue]);
+                $message = 'Akun ini login via SIMRS. Aktifkan SIMRS_AUTH_ENABLED atau hubungi admin.';
+            } elseif (verifyPassword($password, $user['password'])) {
                 pg_query_params($conn, "INSERT INTO login_attempts (ip, username, success) VALUES ($1,$2,TRUE)", [$ip, $usernameValue]);
                 session_regenerate_id(true);
                 $_SESSION['user_id'] = $user['id'];
@@ -95,6 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($result) && $result) {
             pg_free_result($result);
         }
+        } // end simrs/local else
         } // end rate-limit else
     }
 }
