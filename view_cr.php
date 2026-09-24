@@ -1,14 +1,15 @@
 <?php
 require_once 'config.php';
+require_once 'includes/cr_auth.php';
 requireLogin();
 
 $user = getCurrentUser();
 $role = $user['role'] ?? '';
-$pageTitle = 'Detail Tiket';
+$pageTitle = 'Detail Change Request';
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id <= 0) {
-    header('Location: index.php');
+    header('Location: cr_list.php');
     exit;
 }
 
@@ -16,23 +17,23 @@ require_once 'includes/header.php';
 
 $conn = getDBConnection();
 
-$result = pg_query_params($conn, "SELECT t.*, u.name AS created_by_name, u.username AS created_by_username, u.role AS created_by_role, a.name AS assignee_name FROM tickets t LEFT JOIN users u ON t.user_id = u.id LEFT JOIN users a ON a.id = t.assigned_to WHERE t.id = $1", [$id]);
+$result = pg_query_params($conn, "SELECT cr.*, u.name AS reporter_name, u.username AS reporter_username, u.role AS reporter_role, a.name AS assignee_name FROM change_requests cr LEFT JOIN users u ON cr.user_id = u.id LEFT JOIN users a ON a.id = cr.assigned_to WHERE cr.id = $1", [$id]);
 if (!$result || pg_num_rows($result) === 0) {
     if ($result) pg_free_result($result);
     pg_close($conn);
-    header('Location: index.php');
+    header('Location: cr_list.php');
     exit;
 }
-$ticket = pg_fetch_assoc($result);
+$cr = pg_fetch_assoc($result);
 pg_free_result($result);
 
-if (!canViewTicket($ticket, $user)) {
+if (!canViewCr($cr, $user)) {
     pg_close($conn);
     ?>
     <div class="alert alert-danger text-center py-5">
         <h2 class="h5 text-danger">Akses Ditolak</h2>
-        <p>Anda tidak memiliki izin untuk melihat tiket ini.</p>
-        <a href="index.php" class="btn btn-primary">Kembali</a>
+        <p>Anda tidak memiliki izin untuk melihat Change Request ini.</p>
+        <a href="cr_list.php" class="btn btn-primary">Kembali</a>
     </div>
     <?php
     require_once 'includes/footer.php';
@@ -43,42 +44,36 @@ $flashOk = $_SESSION['flash_ok'] ?? null;
 $flashErr = $_SESSION['flash_error'] ?? flash_error();
 unset($_SESSION['flash_ok'], $_SESSION['flash_error']);
 
-// Respons staf pertama (menit kerja) untuk badge SLA respons 60 mnt
-$respMin = null;
-$respAt = null;
-$rr = pg_query_params($conn, "SELECT MIN(h.created_at) AS fa FROM ticket_history h JOIN users u ON u.id = h.actor_id WHERE h.ticket_id = $1 AND u.role IN ('admin','teknisi')", [$id]);
-if ($rr && pg_num_rows($rr) > 0) {
-    $respAt = pg_fetch_result($rr, 0, 0);
-$respLimit = slaResponseLimit();
-    if ($respAt) $respMin = workingMinutesBetween(nextWorkingStart(strtotime($ticket['created_at'])), strtotime($respAt));
-    pg_free_result($rr);
-}
-if ($respMin === null) {
-    $ageMin = workingMinutesBetween(nextWorkingStart(strtotime($ticket['created_at'])), time());
+// Rincian item
+$items = [];
+$ir = pg_query_params($conn, "SELECT * FROM change_request_items WHERE cr_id = $1 ORDER BY id ASC", [$id]);
+if ($ir) {
+    while ($row = pg_fetch_assoc($ir)) $items[] = $row;
+    pg_free_result($ir);
 }
 
-$attachOk = !empty($ticket['attachment_path']) && file_exists(__DIR__ . '/' . $ticket['attachment_path']);
-$attachName = $ticket['attachment_original'] ?: ($attachOk ? basename($ticket['attachment_path']) : '');
-$attachExt = $attachOk ? strtolower(pathinfo($ticket['attachment_path'], PATHINFO_EXTENSION)) : '';
+$attachOk = !empty($cr['attachment_path']) && file_exists(__DIR__ . '/' . $cr['attachment_path']);
+$attachName = $cr['attachment_original'] ?: ($attachOk ? basename($cr['attachment_path']) : '');
+$attachExt = $attachOk ? strtolower(pathinfo($cr['attachment_path'], PATHINFO_EXTENSION)) : '';
 $isImage = in_array($attachExt, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
 
-// Riwayat + komentar
+// Diskusi + riwayat
 $history = [];
-$hr = pg_query_params($conn, "SELECT h.*, u.name AS actor_name FROM ticket_history h LEFT JOIN users u ON u.id = h.actor_id WHERE h.ticket_id = $1 ORDER BY h.created_at DESC LIMIT 30", [$id]);
+$hr = pg_query_params($conn, "SELECT h.*, u.name AS actor_name FROM change_request_history h LEFT JOIN users u ON u.id = h.actor_id WHERE h.cr_id = $1 ORDER BY h.created_at DESC LIMIT 30", [$id]);
 if ($hr) {
     while ($row = pg_fetch_assoc($hr)) $history[] = $row;
     pg_free_result($hr);
 }
 $comments = [];
-$cr = pg_query_params($conn, "SELECT c.*, u.name AS author_name, u.role AS author_role FROM ticket_comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.ticket_id = $1 ORDER BY c.created_at DESC LIMIT 30", [$id]);
-if ($cr) {
-    while ($row = pg_fetch_assoc($cr)) $comments[] = $row;
-    pg_free_result($cr);
+$cr2 = pg_query_params($conn, "SELECT c.*, u.name AS author_name, u.role AS author_role FROM change_request_comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.cr_id = $1 ORDER BY c.created_at DESC LIMIT 30", [$id]);
+if ($cr2) {
+    while ($row = pg_fetch_assoc($cr2)) $comments[] = $row;
+    pg_free_result($cr2);
 }
 
-// Tombol kontekstual per status (fleksibel, teknisi boleh loncat)
-$st = $ticket['status'];
-$canAct = canActOnTicket($ticket, $user);
+// Tombol kontekstual per status (mirror view_ticket.php)
+$st = $cr['status'];
+$canAct = canActOnCr($cr, $user);
 $isStaff = in_array($role, ['admin', 'teknisi'], true);
 $actions = [];
 if ($canAct && $isStaff) {
@@ -93,16 +88,15 @@ if ($canAct && $isStaff) {
         $actions[] = ['k' => 'reopen_progress', 'label' => '↻ Buka Kembali (Kerjakan)', 'btn' => 'btn-warning', 'to' => 'in_progress', 'desc' => 'Ada yang kurang, kerjakan lagi.'];
         $actions[] = ['k' => 'reopen_open', 'label' => '↻ Buka Kembali (Antrean)', 'btn' => 'btn-outline-warning', 'to' => 'open', 'desc' => 'Kembalikan ke antrean.'];
     } elseif ($st === 'closed') {
-        $actions[] = ['k' => 'reopen_open', 'label' => '↻ Buka Kembali', 'btn' => 'btn-warning', 'to' => 'open', 'desc' => 'Tiket dibuka ulang.'];
+        $actions[] = ['k' => 'reopen_open', 'label' => '↻ Buka Kembali', 'btn' => 'btn-warning', 'to' => 'open', 'desc' => 'CR dibuka ulang.'];
         $actions[] = ['k' => 'reopen_progress', 'label' => '▶ Kerjakan Lagi', 'btn' => 'btn-primary', 'to' => 'in_progress', 'desc' => 'Assign ke saya + kerjakan.'];
     }
 }
-// Template jawaban cepat untuk modal tindak lanjut
-$templates = [];
-$tr = pg_query($conn, "SELECT id, judul, isi FROM kb_templates ORDER BY id");
-if ($tr) {
-    while ($row = pg_fetch_assoc($tr)) $templates[] = $row;
-    pg_free_result($tr);
+
+function crJenisBadge($jenis) {
+    $map = ['Penambahan' => 'text-bg-primary', 'Perubahan' => 'text-bg-warning', 'Design' => 'text-bg-info'];
+    $cls = $map[$jenis] ?? 'text-bg-secondary';
+    return '<span class="badge ' . $cls . '">' . htmlspecialchars($jenis) . '</span>';
 }
 ?>
 
@@ -111,35 +105,61 @@ if ($tr) {
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-4">
     <div>
-        <p class="text-danger fw-bold text-uppercase small mb-1" style="letter-spacing:.04em;"><?php echo e($ticket['ticket_number']); ?></p>
-        <h2 class="h4 mb-1"><?php echo e($ticket['title']); ?></h2>
-        <p class="text-secondary small mb-0">Dibuat <?php echo date('d M Y H:i', strtotime($ticket['created_at'])); ?> · Update <?php echo date('d M Y H:i', strtotime($ticket['updated_at'])); ?><?php if (!empty($ticket['assignee_name'])) echo ' · Ditangani: ' . e($ticket['assignee_name']); ?></p>
+        <p class="text-danger fw-bold text-uppercase small mb-1" style="letter-spacing:.04em;"><?php echo e($cr['cr_number']); ?></p>
+        <h2 class="h4 mb-1"><?php echo e($cr['aplikasi']); ?> — <?php echo e($cr['fitur']); ?></h2>
+        <p class="text-secondary small mb-0">Dibuat <?php echo date('d M Y H:i', strtotime($cr['created_at'])); ?> · Update <?php echo date('d M Y H:i', strtotime($cr['updated_at'])); ?><?php if (!empty($cr['assignee_name'])) echo ' · Ditangani: ' . e($cr['assignee_name']); ?></p>
     </div>
     <div class="d-flex gap-2 flex-shrink-0 flex-wrap">
-        <span class="status-badge status-<?php echo $ticket['status']; ?>"><?php echo e($ticket['status']); ?></span>
-        <span class="priority-badge priority-<?php echo strtolower($ticket['priority']); ?>"><?php echo e($ticket['priority']); ?></span>
+        <span class="status-badge status-<?php echo $cr['status']; ?>"><?php echo e($cr['status']); ?></span>
+        <span class="priority-badge priority-<?php echo strtolower($cr['priority']); ?>"><?php echo e($cr['priority']); ?></span>
     </div>
 </div>
 
 <div class="row g-3 align-items-start">
     <div class="col-lg-8">
         <div class="card"><div class="card-body">
-        <h3 class="h6">Deskripsi</h3>
-        <div class="rich-content"><?php echo renderTicketDescription($ticket['description']); ?></div>
+        <h3 class="h6">Keterangan</h3>
+        <div class="rich-content"><?php echo renderTicketDescription($cr['keterangan']); ?></div>
+
+        <?php if (!empty($items)): ?>
+        <h3 class="h6 mt-4">Rincian Perubahan (<?php echo count($items); ?>)</h3>
+        <div class="table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:48px;" class="text-center">No</th>
+                    <th style="width:140px;">Jenis</th>
+                    <th>Uraian</th>
+                    <th>Alasan / Manfaat</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($items as $idx => $it): ?>
+                <tr>
+                    <td class="text-center"><?php echo $idx + 1; ?></td>
+                    <td><?php echo crJenisBadge($it['jenis']); ?></td>
+                    <td><?php echo nl2br(e($it['uraian'])); ?></td>
+                    <td><?php echo nl2br(e($it['alasan'] ?? '-')); ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        </div>
+        <?php endif; ?>
 
         <?php if ($attachOk): ?>
         <h3 class="h6 mt-4">Lampiran</h3>
         <div class="bg-body-tertiary border rounded-3 p-3">
             <?php if ($isImage): ?>
-                <a href="<?php echo e($ticket['attachment_path']); ?>" target="_blank" rel="noopener">
-                    <img src="<?php echo e($ticket['attachment_path']); ?>" alt="Lampiran tiket" class="attach-preview">
+                <a href="<?php echo e($cr['attachment_path']); ?>" target="_blank" rel="noopener">
+                    <img src="<?php echo e($cr['attachment_path']); ?>" alt="Lampiran CR" class="attach-preview">
                 </a>
             <?php endif; ?>
             <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
                 <span class="fw-semibold small">📎 <?php echo e($attachName); ?></span>
                 <span class="d-flex gap-2">
-                    <a class="btn btn-sm btn-primary" href="<?php echo e($ticket['attachment_path']); ?>" download>Unduh</a>
-                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e($ticket['attachment_path']); ?>" target="_blank" rel="noopener">Lihat</a>
+                    <a class="btn btn-sm btn-primary" href="<?php echo e($cr['attachment_path']); ?>" download>Unduh</a>
+                    <a class="btn btn-sm btn-outline-secondary" href="<?php echo e($cr['attachment_path']); ?>" target="_blank" rel="noopener">Lihat</a>
                 </span>
             </div>
         </div>
@@ -182,23 +202,18 @@ if ($tr) {
 
     <div class="col-lg-4">
         <div class="card mb-3"><div class="card-body">
-            <h3 class="h6">Informasi Tiket</h3>
+            <h3 class="h6">Informasi Change Request</h3>
             <ul class="list-group list-group-flush">
-                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Kategori</span><strong><?php echo e($ticket['category']); ?></strong></li>
-                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Divisi</span><strong><?php echo e($ticket['division']); ?></strong></li>
-                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Pelapor</span><strong class="text-end"><?php echo e($ticket['created_by_name'] ?? '-'); ?><?php echo !empty($ticket['created_by_username']) ? ' (@' . e($ticket['created_by_username']) . ')' : ''; ?></strong></li>
-                <?php if (!empty($ticket['created_by_role'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Role Pelapor</span><span class="status-badge status-<?php echo e($ticket['created_by_role']); ?>"><?php echo e($ticket['created_by_role']); ?></span></li><?php endif; ?>
-                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Ditangani oleh</span><strong><?php echo e($ticket['assignee_name'] ?? '— Belum diassign —'); ?></strong></li>
-                <?php if (!empty($ticket['sla_due_at'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Jatuh tempo SLA</span><strong><?php echo date('d M Y H:i', strtotime($ticket['sla_due_at'])); ?></strong></li><?php endif; ?>
-                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Respons pertama</span><strong>
-                    <?php if ($respMin !== null): ?>
-                        <?php echo fmtWorkingDuration($respMin); ?>
-                        <?php if ($respMin <= $respLimit): ?><span class="badge text-bg-success">✓ ≤<?php echo $respLimit; ?> mnt</span><?php else: ?><span class="badge text-bg-danger">telat +<?php echo fmtWorkingDuration($respMin - $respLimit); ?></span><?php endif; ?>
-                    <?php else: ?>
-                        <span class="text-secondary">Belum direspons (<?php echo fmtWorkingDuration($ageMin); ?>)</span>
-                        <?php if ($ageMin > $respLimit): ?><span class="badge text-bg-danger">breach</span><?php elseif ($ageMin >= $respLimit - 15): ?><span class="badge text-bg-warning">≤15 mnt lagi</span><?php endif; ?>
-                    <?php endif; ?>
-                </strong></li>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Aplikasi</span><strong class="text-end"><?php echo e($cr['aplikasi']); ?></strong></li>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Unit</span><strong><?php echo e($cr['unit']); ?></strong></li>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Modul</span><strong class="text-end"><?php echo e($cr['modul']); ?></strong></li>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Fitur</span><strong class="text-end"><?php echo e($cr['fitur']); ?></strong></li>
+                <?php if (!empty($cr['url'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">URL</span><a href="<?php echo e($cr['url']); ?>" target="_blank" rel="noopener" class="text-truncate" style="max-width:60%;"><?php echo e($cr['url']); ?></a></li><?php endif; ?>
+                <?php if (!empty($cr['waktu_dibutuhkan'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Dibutuhkan</span><strong><?php echo date('d M Y H:i', strtotime($cr['waktu_dibutuhkan'])); ?></strong></li><?php endif; ?>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Pelapor</span><strong class="text-end"><?php echo e($cr['reporter_name'] ?? '-'); ?><?php echo !empty($cr['reporter_username']) ? ' (@' . e($cr['reporter_username']) . ')' : ''; ?></strong></li>
+                <?php if (!empty($cr['reporter_role'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Role Pelapor</span><span class="status-badge status-<?php echo e($cr['reporter_role']); ?>"><?php echo e($cr['reporter_role']); ?></span></li><?php endif; ?>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Ditangani oleh</span><strong><?php echo e($cr['assignee_name'] ?? '— Belum diassign —'); ?></strong></li>
+                <?php if (!empty($cr['sla_due_at'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Jatuh tempo SLA</span><strong><?php echo date('d M Y H:i', strtotime($cr['sla_due_at'])); ?></strong></li><?php endif; ?>
                 <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Lampiran</span><strong><?php echo $attachOk ? 'Ada (1 file)' : 'Tidak ada'; ?></strong></li>
             </ul>
         </div></div>
@@ -219,44 +234,35 @@ if ($tr) {
         <?php endif; ?>
 
         <div class="d-flex gap-2 flex-wrap">
-            <?php if (canEditTicket($ticket, $user)): ?>
-                <a href="edit_ticket.php?id=<?php echo $ticket['id']; ?>" class="btn btn-warning btn-sm">Edit (Admin)</a>
+            <?php if (canEditCr($cr, $user)): ?>
+                <a href="edit_cr.php?id=<?php echo $cr['id']; ?>" class="btn btn-warning btn-sm">Edit (Admin)</a>
             <?php endif; ?>
-            <?php if (canDeleteTicket($ticket, $user)): ?>
-                <form method="POST" action="delete_ticket.php" class="d-inline" onsubmit="return confirm('Hapus tiket ini beserta lampirannya?')">
+            <?php if (canDeleteCr($cr, $user)): ?>
+                <form method="POST" action="delete_cr.php" class="d-inline" onsubmit="return confirm('Hapus CR ini beserta lampiran dan rinciannya?')">
                     <?php echo csrf_field(); ?>
-                    <input type="hidden" name="id" value="<?php echo $ticket['id']; ?>">
+                    <input type="hidden" name="id" value="<?php echo $cr['id']; ?>">
                     <button type="submit" class="btn btn-danger btn-sm">Hapus</button>
                 </form>
             <?php endif; ?>
-            <a href="index.php" class="btn btn-primary btn-sm">Kembali</a>
+            <a href="cr_list.php" class="btn btn-primary btn-sm">Kembali</a>
         </div>
     </div>
 </div>
 
 <div class="modal fade" id="actionModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
-    <form method="POST" action="ticket_action.php" class="modal-content">
+    <form method="POST" action="cr_action.php" class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="actionModalLabel">Tindak Lanjut</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
       </div>
       <div class="modal-body">
         <?php echo csrf_field(); ?>
-        <input type="hidden" name="id" value="<?php echo $ticket['id']; ?>">
+        <input type="hidden" name="id" value="<?php echo $cr['id']; ?>">
         <input type="hidden" name="action" id="actionInput" value="comment">
         <p class="small mb-1"><span id="actionDesc" class="text-secondary"></span></p>
-        <p class="small mb-2">Status saat ini: <span class="status-badge status-<?php echo $ticket['status']; ?>"><?php echo e($ticket['status']); ?></span> → Tujuan: <strong id="actionTo">-</strong></p>
+        <p class="small mb-2">Status saat ini: <span class="status-badge status-<?php echo $cr['status']; ?>"><?php echo e($cr['status']); ?></span> → Tujuan: <strong id="actionTo">-</strong></p>
         <label for="noteInput" class="form-label">Catatan wajib <span class="text-secondary">(min 10 karakter)</span></label>
-        <?php if (!empty($templates)): ?>
-        <div class="input-group mb-2">
-            <select id="tplSelect" class="form-select form-select-sm" aria-label="Sisipkan template jawaban">
-                <option value="">⚡ Sisipkan template…</option>
-                <?php foreach ($templates as $tp): ?><option value="<?php echo $tp['id']; ?>"><?php echo e($tp['judul']); ?></option><?php endforeach; ?>
-            </select>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="tplBtn">Sisipkan</button>
-        </div>
-        <?php endif; ?>
         <textarea name="note" id="noteInput" class="form-control" rows="4" required minlength="10" placeholder="Tulis apa yang dikerjakan / hasil pengecekan / langkah berikutnya…"></textarea>
       </div>
       <div class="modal-footer">
@@ -267,7 +273,6 @@ if ($tr) {
   </div>
 </div>
 <script>
-var KB_TEMPLATES = <?php echo json_encode(array_column($templates, 'isi', 'id'), JSON_UNESCAPED_UNICODE); ?>;
 document.addEventListener('DOMContentLoaded', function () {
   var modal = document.getElementById('actionModal');
   if (!modal) return;
@@ -279,17 +284,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('actionTo').textContent = btn.getAttribute('data-to') || '-';
     document.getElementById('actionDesc').textContent = btn.getAttribute('data-desc') || '';
   });
-  var sel = document.getElementById('tplSelect');
-  var btn = document.getElementById('tplBtn');
-  var note = document.getElementById('noteInput');
-  if (sel && btn && note) {
-    btn.addEventListener('click', function () {
-      var txt = KB_TEMPLATES[sel.value] || '';
-      if (!txt) return;
-      note.value = (note.value ? note.value.replace(/\s+$/, '') + "\n\n" : '') + txt;
-      note.focus();
-    });
-  }
 });
 </script>
 

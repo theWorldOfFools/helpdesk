@@ -48,10 +48,10 @@ Sistem tiket online untuk mencatat dan memantau operasional divisi IT dengan sis
 
 ## Prasyarat
 
-- PHP 7.4 ke atas
+- PHP 8.0 ke atas (teruji 8.2)
 - PostgreSQL 12 ke atas
-- Web server (Apache/Nginx)
-- Ekstensi PHP: `pgsql`
+- Web server (Apache/Nginx) atau `php -S`
+- Ekstensi PHP: `pgsql`, `mbstring`
 
 ## Instalasi
 
@@ -63,7 +63,14 @@ git clone <repository-url> helpdesk
 cd helpdesk
 ```
 
-### 2. Konfigurasi Database
+### 2. Konfigurasi Env
+
+```bash
+cp .env.example .env
+# sesuaikan DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASS
+```
+
+### 3. Konfigurasi Database
 
 Buat database PostgreSQL dan import schema:
 
@@ -74,24 +81,33 @@ CREATE DATABASE helpdesk_db;
 \i db/schema.sql
 ```
 
-Atau import migrasi:
+Atau import migrasi (berurutan):
 
 ```bash
 psql -U postgres -d helpdesk_db -f db/schema.sql
 psql -U postgres -d helpdesk_db -f migrations/001_initial_schema.sql
 psql -U postgres -d helpdesk_db -f migrations/002_rbac_schema.sql
+psql -U postgres -d helpdesk_db -f migrations/003_ticket_attachments.sql
+psql -U postgres -d helpdesk_db -f migrations/004_assignment_sla.sql
+psql -U postgres -d helpdesk_db -f migrations/005_comments_history.sql
+psql -U postgres -d helpdesk_db -f migrations/006_login_attempts.sql
+psql -U postgres -d helpdesk_db -f migrations/007_sla_working_hours.sql
+psql -U postgres -d helpdesk_db -f migrations/008_account.sql
+psql -U postgres -d helpdesk_db -f migrations/009_kb.sql
+psql -U postgres -d helpdesk_db -f migrations/010_settings_notifications.sql
+psql -U postgres -d helpdesk_db -f migrations/011_change_requests.sql
 ```
 
-### 3. Konfigurasi Koneksi
+> Catatan: migrasi wajib dijalankan berurutan 001→011 dari schema kosong.
+> `011_change_requests.sql` idempoten (`IF NOT EXISTS`) sehingga aman
+> dijalankan ulang di database lama. Setelah migrasi, buka form di
+> `create_cr.php` (login dulu) dan pastikan folder
+> `uploads/change_requests/` writable.
 
-Edit file `config.php` sesuai lingkungan Anda:
+### 3b. Install Dependensi PHP (untuk export XLSX/PDF)
 
-```php
-define('DB_HOST', 'localhost');
-define('DB_PORT', '5432');
-define('DB_NAME', 'helpdesk_db');
-define('DB_USER', 'postgres');
-define('DB_PASS', 'your_password');
+```bash
+composer install
 ```
 
 ### 4. Login Default
@@ -125,34 +141,78 @@ helpdesk/
 ├── config.php              # Koneksi database PostgreSQL & auth functions
 ├── login.php               # Halaman login
 ├── logout.php              # Logout
-├── index.php               # Dashboard / Daftar tiket (role-based)
+├── index.php               # Daftar tiket (DataTables server-side + fallback PHP)
 ├── create_ticket.php       # Form tambah tiket
-├── view_ticket.php         # Lihat detail tiket (with permission check)
-├── edit_ticket.php         # Edit tiket (admin + teknisi only)
-├── delete_ticket.php       # Hapus tiket (admin only)
-├── dashboard.php           # Monitoring status tiket (role-specific)
-├── user_management.php       # Kelola pengguna (admin only)
+├── create_cr.php           # Form header Change Request (fondasi; detail menyusul)
+├── view_ticket.php         # Detail + Tindak Lanjut (tombol aksi) + diskusi/riwayat
+├── edit_ticket.php         # Edit data (admin only)
+├── delete_ticket.php       # Hapus tiket via POST+CSRF (admin only)
+├── ticket_action.php       # Backend tindak lanjut (fleksibel + wajib catatan)
+├── dashboard.php           # Dashboard per-role + Chart.js + leaderboard bulanan
+├── user_management.php     # Kelola pengguna + reset PW + log aktivitas (admin)
+├── profile.php             # Profil + ganti password (semua role)
+├── kb.php                  # Basis solusi (semua role)
+├── kb_manage.php           # Kelola artikel + template jawaban (admin/teknisi)
+├── notifications.php         # Pusat notifikasi in-app (semua role)
+├── manifest.json + sw.js     # PWA dasar (instalable, cache aset statis)
+├── api/
+│   ├── tickets.php         # DataSource DataTables tiket (server paging/sort/filter)
+│   ├── users.php           # DataSource Grid users (admin)
+│   ├── dashboard.php       # JSON chart + leaderboard (trend/status/workload)
+│   └── reports.php         # JSON laporan (kpi/trend/sla_response/sla_resolution/breach)
+├── export.php              # Export csv/xlsx/pdf sesuai filter + scope role
 ├── db/
 │   └── schema.sql          # Schema database (users + tickets)
 ├── migrations/
 │   ├── 001_initial_schema.sql
-│   └── 002_rbac_schema.sql
+│   ├── 002_rbac_schema.sql
+│   ├── 003_ticket_attachments.sql
+│   ├── 004_assignment_sla.sql   # assigned_to, sla_due_at, resolved_at, closed_at
+│   ├── 005_comments_history.sql # ticket_comments + ticket_history
+│   ├── 006_login_attempts.sql   # rate-limit login
+│   ├── 007_sla_working_hours.sql # holidays + working_minutes()/next_working_start()
+│   ├── 008_account.sql          # remember_token, must_change_password, activity_log
+│   ├── 009_kb.sql               # kb_articles + kb_templates (seed)
+│   ├── 010_settings_notifications.sql # settings target SLA + notifications
+│   └── 011_change_requests.sql  # change_requests + items + history (fondasi header CR)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
-│   ├── header.php          # Template header (with user info)
-│   └── footer.php          # Template footer
+│   ├── cr_auth.php         # Helper CR: generateCrNumber/canViewCr/canActOnCr/upload
+│   ├── csrf.php            # CSRF token/verify
+│   ├── env.php             # Loader .env minimal
+│   ├── header.php          # Template + DataTables/Chart.js CDN
+│   └── footer.php          # Template + datatables-grids.js/dashboard-charts.js/reports.js
 └── assets/
-    ├── css/style.css       # Styling (includes login page styles)
-    └── js/script.js        # JavaScript interactivity
+    ├── css/style.css
+    └── js/
+        ├── script.js
+        ├── datatables-grids.js   # DataTables tiket/users/divisi/workload
+        ├── dashboard-charts.js  # Chart.js + leaderboard fetch
+        └── reports.js           # Menu laporan fetch + analisa
 ```
 
 ## Konfigurasi RBAC
 
 Sistem menggunakan 3 role:
 
-- **Administrator**: Akses penuh ke semua fitur termasuk manajemen pengguna dan penghapusan tiket
-- **Teknisi**: Dapat membuat, melihat semua tiket, dan mengedit tiket (termasuk status)
-- **Pelapor**: Dapat membuat tiket dan hanya melihat tiket yang dibuat sendiri
+- **Administrator**: Akses penuh + Edit data + semua aksi + manajemen pengguna + hapus tiket
+- **Teknisi**: Tindak lanjut via tombol aksi (fleksibel open↔in_progress↔resolved↔closed, wajib catatan), tanpa Edit data
+- **Pelapor**: Buat tiket + lihat/komentar tiket sendiri saja
+
+## Fitur Baru
+
+- Tindak lanjut terpisah dari Edit (`ticket_action.php`), audit `ticket_history` + `ticket_comments`
+- Assignment teknisi + SLA jam kerja Senin–Sabtu 08:00–17:00 (`sla_due_at`, badge overdue, MTTR jam kerja)
+- SLA respons ≤ 60 menit kerja (numerator/denominator, target 100%) + widget peringatan teknisi
+- Menu Laporan eksekutif: KPI, analisa otomatis, tren, SLA respons/resolusi, breach list, kelola hari libur, export CSV/XLSX/PDF
+- Modul akun: profil + ganti password, remember-me fungsional, wajib ganti password default, reset oleh admin, log aktivitas
+- Knowledge base: artikel solusi + template jawaban sekali klik di modal tindak lanjut
+- Target SLA & respons jadi setting DB (diubah admin via menu Laporan, tanpa coding)
+- Notifikasi in-app: bell + halaman, terpicu saat tiket dibuat/diubah
+- PWA dasar: manifest + ikon + service worker (cache aset statis)
+- DataTables server-side di semua tabel (fallback PHP bila CDN offline)
+- Dashboard Chart.js per-role + leaderboard teknisi (skor cepat+banyak) & pelapor (bulanan)
+- Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
 
 ### Menambah Pengguna Baru
 

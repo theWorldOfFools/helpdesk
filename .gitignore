@@ -1,0 +1,8 @@
+.env
+uploads/tickets/*
+!uploads/tickets/.htaccess
+uploads/change_requests/*
+!uploads/change_requests/.htaccess
+*.log
+.DS_Store
+vendor/
