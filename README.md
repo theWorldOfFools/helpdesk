@@ -112,7 +112,7 @@ psql -U postgres -d helpdesk_db -f migrations/013_simrs_auth.sql
 psql -U postgres -d helpdesk_db -f migrations/014_divisions.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→014 dari schema kosong.
+> Catatan: migrasi wajib dijalankan berurutan 001→015 dari schema kosong.
 > `011`, `012`, `013`, `014` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
@@ -176,6 +176,9 @@ helpdesk/
 ├── user_management.php     # Kelola pengguna + reset PW + log aktivitas (admin)
 ├── edit_user.php           # Edit nama/divisi/role + hapus pengguna (admin, guard data tertaut)
 ├── divisi.php              # Master Divisi: tambah/rename/nonaktif/hapus + hitungan pakai (admin)
+├── oncall.php              # Jadwal Oncall bulanan + import XLS/PNG (preview) + rotasi otomatis (kelola: admin, lihat: semua)
+├── oncall_action.php       # Backend oncall: tambah/ubah/hapus/import/rotasi (admin, POST+CSRF)
+├── oncall_template.php     # Download template XLS import oncall (Nama | Nomor tanggal)
 ├── profile.php             # Profil + ganti password (semua role)
 ├── kb.php                  # Basis solusi (semua role)
 ├── kb_manage.php           # Kelola artikel + template jawaban (admin/teknisi)
@@ -205,6 +208,7 @@ helpdesk/
 │   ├── 012_change_request_comments.sql # change_request_comments (diskusi CR)
 │   ├── 013_simrs_auth.sql       # auth_source/external_id/jabatan/unit_kerja (login SIMRS)
 │   └── 014_divisions.sql        # master divisi + seed dari daftar lama & data existing
+│   └── 015_oncall_schedules.sql # jadwal oncall: tanggal + user (Minggu/libur boleh 2 orang)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
 │   ├── simrs_auth.php      # Helper SIMRS: koneksi read-only, verify HMAC+bcrypt, profil pegawai

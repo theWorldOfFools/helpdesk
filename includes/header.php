@@ -101,6 +101,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="create_cr.php" class="nav-link side-link<?php echo side_link_active('create_cr.php', $activePage); ?>">
                         <i class="bi bi-plus-square"></i> Buat CR
                     </a>
+                    <a href="oncall.php" class="nav-link side-link<?php echo side_link_active('oncall.php', $activePage); ?>">
+                        <i class="bi bi-calendar-check"></i> Jadwal Oncall
+                    </a>
                     <a href="laporan.php" class="nav-link side-link<?php echo side_link_active('laporan.php', $activePage); ?>">
                         <i class="bi bi-clipboard-data"></i> Laporan
                     </a>
@@ -135,6 +138,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="create_cr.php" class="nav-link side-link<?php echo side_link_active('create_cr.php', $activePage); ?>">
                         <i class="bi bi-plus-square"></i> Buat CR
                     </a>
+                    <a href="oncall.php" class="nav-link side-link<?php echo side_link_active('oncall.php', $activePage); ?>">
+                        <i class="bi bi-calendar-check"></i> Jadwal Oncall
+                    </a>
                     <a href="laporan.php" class="nav-link side-link<?php echo side_link_active('laporan.php', $activePage); ?>">
                         <i class="bi bi-clipboard-data"></i> Laporan
                     </a>
@@ -157,6 +163,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     </a>
                     <a href="create_cr.php" class="nav-link side-link side-cta<?php echo side_link_active('create_cr.php', $activePage); ?>">
                         <i class="bi bi-plus-lg"></i> Buat CR Baru
+                    </a>
+                    <a href="oncall.php" class="nav-link side-link<?php echo side_link_active('oncall.php', $activePage); ?>">
+                        <i class="bi bi-calendar-check"></i> Jadwal Oncall
                     </a>
                     <a href="laporan.php" class="nav-link side-link<?php echo side_link_active('laporan.php', $activePage); ?>">
                         <i class="bi bi-clipboard-data"></i> Laporan Saya
