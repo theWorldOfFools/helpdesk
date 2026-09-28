@@ -330,6 +330,7 @@
               var h = '<strong>' + esc(row.task_code) + '</strong>';
               if (row.ticket_number) h += ' <span class="badge text-bg-info" title="' + esc(row.ticket_number) + '">🎫</span>';
               if (row.cr_number) h += ' <span class="badge text-bg-warning" title="' + esc(row.cr_number) + '">🔄</span>';
+              if (parseInt(row.attachment_count || 0, 10) > 0) h += ' <span class="badge text-bg-secondary" title="' + esc(row.attachment_count) + ' lampiran">📎' + esc(row.attachment_count) + '</span>';
               if (row.is_overdue) h += ' <span class="badge text-bg-danger">overdue</span>';
               return h;
             }
@@ -341,7 +342,16 @@
               return esc(String(row.title || '').substring(0, 60));
             }
           },
-          { data: 'owner_name', title: 'Owner', render: function (d, t) { return t !== 'display' ? d : esc(d || '—'); } },
+          {
+            data: 'owner_name', title: 'Owner',
+            render: function (d, t, row) {
+              if (t !== 'display') return d;
+              var h = esc(d || '—');
+              var ac = parseInt((row && row.assignee_count) || 0, 10);
+              if (ac > 1) h += '<br><small class="text-secondary" title="' + esc((row && row.assignee_names) || '') + '">+' + (ac - 1) + ' anggota</small>';
+              return h;
+            }
+          },
           {
             data: 'phase', title: 'Fase',
             render: function (data, type, row) {

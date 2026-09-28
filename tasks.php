@@ -46,13 +46,17 @@ if ($filterPriority !== '') {
 }
 if ($filterOwner === 'mine') {
     $params[] = $user['id'];
-    $conds[] = 'd.owner_id = $' . count($params);
+    $n = count($params);
+    $conds[] = '(d.owner_id = $' . $n . ' OR EXISTS (SELECT 1 FROM dev_task_assignees a WHERE a.task_id = d.id AND a.user_id = $' . $n . '))';
 } elseif ($filterOwner === 'unassigned') {
-    $conds[] = 'd.owner_id IS NULL';
+    $conds[] = 'd.owner_id IS NULL AND NOT EXISTS (SELECT 1 FROM dev_task_assignees a WHERE a.task_id = d.id)';
 }
 $where = implode(' AND ', $conds);
 
-$baseSelect = "SELECT d.*, u.name AS owner_name, t.ticket_number, c.cr_number FROM dev_tasks d"
+$baseSelect = "SELECT d.*, u.name AS owner_name, t.ticket_number, c.cr_number,"
+    . " (SELECT string_agg(u2.name, ', ' ORDER BY u2.name) FROM dev_task_assignees a JOIN users u2 ON u2.id = a.user_id WHERE a.task_id = d.id) AS assignee_names,"
+    . " (SELECT COUNT(*) FROM dev_task_assignees a2 WHERE a2.task_id = d.id) AS assignee_count,"
+    . " (SELECT COUNT(*) FROM dev_task_attachments at WHERE at.task_id = d.id) AS attachment_count FROM dev_tasks d"
     . " LEFT JOIN users u ON u.id = d.owner_id"
     . " LEFT JOIN tickets t ON t.id = d.ticket_id"
     . " LEFT JOIN change_requests c ON c.id = d.cr_id";
@@ -159,12 +163,12 @@ $phaseBadge = ['backlog' => 'text-bg-secondary', 'siap' => 'text-bg-info', 'deve
         <div class="card h-100 bg-body-tertiary">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span class="badge <?php echo $phaseBadge[$ph]; ?>"><?php echo $ph; ?></span>
-                <span class="badge text-bg-light border"><?php echo count($board[$ph]); ?></span>
+                <span class="badge text-bg-light border" data-phase-count="<?php echo $ph; ?>"><?php echo count($board[$ph]); ?></span>
             </div>
-            <div class="card-body d-flex flex-column gap-2 p-2">
+            <div class="card-body d-flex flex-column gap-2 p-2" data-drop-phase="<?php echo $ph; ?>">
                 <?php foreach ($board[$ph] as $t): ?>
                 <?php $od = isTaskOverdue($t); ?>
-                <div class="card <?php echo $od ? 'border-danger' : ''; ?>">
+                <div class="card task-card <?php echo $od ? 'border-danger' : ''; ?>" draggable="true" data-task-id="<?php echo (int)$t['id']; ?>" data-phase="<?php echo $t['phase']; ?>">
                     <div class="card-body p-2">
                         <div class="d-flex justify-content-between gap-2 align-items-start">
                             <a href="view_task.php?id=<?php echo $t['id']; ?>" class="fw-semibold text-decoration-none small"><?php echo htmlspecialchars($t['task_code']); ?></a>
@@ -172,8 +176,8 @@ $phaseBadge = ['backlog' => 'text-bg-secondary', 'siap' => 'text-bg-info', 'deve
                         </div>
                         <div class="small mt-1"><?php echo htmlspecialchars(mb_strimwidth($t['title'], 0, 80, '…')); ?></div>
                         <div class="d-flex justify-content-between align-items-center gap-2 mt-2 flex-wrap">
-                            <small class="text-secondary">👤 <?php echo htmlspecialchars($t['owner_name'] ?? '—'); ?></small>
-                            <?php if (!empty($t['due_date'])): ?><small class="<?php echo $od ? 'text-danger fw-bold' : 'text-secondary'; ?>">📅 <?php echo date('d M', strtotime($t['due_date'])); ?></small><?php endif; ?>
+                            <small class="text-secondary">👤 <?php echo htmlspecialchars($t['owner_name'] ?? '—'); ?><?php $ac = (int)($t['assignee_count'] ?? 0); if ($ac > 1): ?> <span class="badge text-bg-primary" title="<?php echo htmlspecialchars($t['assignee_names'] ?? ''); ?>">+<?php echo $ac - 1; ?></span><?php endif; ?></small>
+                            <span class="d-flex gap-1 align-items-center"><?php $atc = (int)($t['attachment_count'] ?? 0); if ($atc > 0): ?><small title="<?php echo $atc; ?> lampiran">📎<?php echo $atc; ?></small><?php endif; ?><?php if (!empty($t['due_date'])): ?><small class="<?php echo $od ? 'text-danger fw-bold' : 'text-secondary'; ?>">📅 <?php echo date('d M', strtotime($t['due_date'])); ?></small><?php endif; ?></span>
                         </div>
                         <?php if (!empty($t['ticket_number']) || !empty($t['cr_number'])): ?>
                         <div class="mt-1 d-flex gap-1 flex-wrap">
@@ -227,9 +231,9 @@ $phaseBadge = ['backlog' => 'text-bg-secondary', 'siap' => 'text-bg-info', 'deve
                 <?php foreach ($tasks as $row): ?>
                 <?php $od = isTaskOverdue($row); ?>
                 <tr>
-                    <td><strong><?php echo htmlspecialchars($row['task_code']); ?></strong><?php if (!empty($row['ticket_number'])): ?> <a href="view_ticket.php?id=<?php echo (int)$row['ticket_id']; ?>" class="badge text-bg-info text-decoration-none">🎫</a><?php endif; ?><?php if (!empty($row['cr_number'])): ?> <a href="view_cr.php?id=<?php echo (int)$row['cr_id']; ?>" class="badge text-bg-warning text-decoration-none">🔄</a><?php endif; ?></td>
+                    <td><strong><?php echo htmlspecialchars($row['task_code']); ?></strong><?php if (!empty($row['ticket_number'])): ?> <a href="view_ticket.php?id=<?php echo (int)$row['ticket_id']; ?>" class="badge text-bg-info text-decoration-none">🎫</a><?php endif; ?><?php if (!empty($row['cr_number'])): ?> <a href="view_cr.php?id=<?php echo (int)$row['cr_id']; ?>" class="badge text-bg-warning text-decoration-none">🔄</a><?php endif; ?><?php if ((int)($row['attachment_count'] ?? 0) > 0): ?> <span class="badge text-bg-secondary" title="<?php echo (int)$row['attachment_count']; ?> lampiran">📎<?php echo (int)$row['attachment_count']; ?></span><?php endif; ?></td>
                     <td><?php echo htmlspecialchars(mb_strimwidth($row['title'], 0, 60, '…')); ?><br><small class="text-secondary">buat: <?php echo date('d M Y', strtotime($row['created_at'])); ?></small></td>
-                    <td><?php echo htmlspecialchars($row['owner_name'] ?? '—'); ?></td>
+                    <td><?php echo htmlspecialchars($row['owner_name'] ?? '—'); ?><?php $rac = (int)($row['assignee_count'] ?? 0); if ($rac > 1): ?><br><small class="text-secondary" title="<?php echo htmlspecialchars($row['assignee_names'] ?? ''); ?>">+<?php echo $rac - 1; ?> anggota</small><?php endif; ?></td>
                     <td><span class="badge <?php echo $phaseBadge[$row['phase']]; ?>"><?php echo htmlspecialchars($row['phase']); ?></span></td>
                     <td><span class="priority-badge priority-<?php echo strtolower($row['priority']); ?>"><?php echo htmlspecialchars($row['priority']); ?></span></td>
                     <td class="text-nowrap small"><?php echo !empty($row['due_date']) ? ('<span class="' . ($od ? 'text-danger fw-bold' : '') . '">' . date('d M Y', strtotime($row['due_date'])) . '</span>') : '<span class="text-secondary">-</span>'; ?></td>
@@ -262,3 +266,6 @@ $phaseBadge = ['backlog' => 'text-bg-secondary', 'siap' => 'text-bg-info', 'deve
 
 <?php pg_close($conn); ?>
 <?php require_once 'includes/footer.php'; ?>
+<?php if ($view === 'board'): ?>
+<script src="assets/js/tasks-board.js"></script>
+<?php endif; ?>

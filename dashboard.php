@@ -124,10 +124,10 @@ if (!$isPelapor) {
     $todoSummary['done_month'] = (int)pg_fetch_result(pg_query($conn, "SELECT COUNT(*) FROM dev_tasks WHERE phase = 'done' AND date_trunc('month', done_at) = date_trunc('month', NOW())"), 0, 0);
     $todoSummary['overdue'] = (int)pg_fetch_result(pg_query($conn, "SELECT COUNT(*) FROM dev_tasks WHERE phase <> 'done' AND due_date IS NOT NULL AND due_date < CURRENT_DATE"), 0, 0);
     if ($role === 'teknisi') {
-        $mr = pg_query_params($conn, "SELECT COUNT(*) FROM dev_tasks WHERE owner_id = $1 AND phase <> 'done'", [$user['id']]);
+        $mr = pg_query_params($conn, "SELECT COUNT(*) FROM dev_tasks d WHERE d.phase <> 'done' AND (d.owner_id = $1 OR EXISTS (SELECT 1 FROM dev_task_assignees a WHERE a.task_id = d.id AND a.user_id = $1))", [$user['id']]);
         $todoSummary['mine'] = $mr ? (int)pg_fetch_result($mr, 0, 0) : 0;
         if ($mr) pg_free_result($mr);
-        $mo = pg_query_params($conn, "SELECT COUNT(*) FROM dev_tasks WHERE owner_id = $1 AND phase <> 'done' AND due_date IS NOT NULL AND due_date < CURRENT_DATE", [$user['id']]);
+        $mo = pg_query_params($conn, "SELECT COUNT(*) FROM dev_tasks d WHERE d.phase <> 'done' AND d.due_date IS NOT NULL AND d.due_date < CURRENT_DATE AND (d.owner_id = $1 OR EXISTS (SELECT 1 FROM dev_task_assignees a WHERE a.task_id = d.id AND a.user_id = $1))", [$user['id']]);
         $todoSummary['mine_overdue'] = $mo ? (int)pg_fetch_result($mo, 0, 0) : 0;
         if ($mo) pg_free_result($mo);
     }

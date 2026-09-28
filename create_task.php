@@ -15,7 +15,7 @@ $pageTitle = 'Buat Todo SDLC';
 require_once 'includes/header.php';
 
 $conn = getDBConnection();
-$ownerOptions = getTaskOwnerCandidates($conn);
+$staffOptions = getTaskOwnerCandidates($conn);
 
 // Relasi opsional: tiket yang belum selesai + CR yang belum closed (batas 200 terbaru)
 $ticketOptions = [];
@@ -35,7 +35,8 @@ $message = '';
 $messageType = '';
 $createdId = null;
 $createdCode = null;
-$old = ['title' => '', 'description' => '', 'priority' => 'medium', 'owner_id' => $user['id'], 'ticket_id' => '', 'cr_id' => '', 'due_date' => '', 'estimate' => ''];
+$old = ['title' => '', 'description' => '', 'priority' => 'medium', 'ticket_id' => '', 'cr_id' => '', 'due_date' => '', 'estimate' => ''];
+$postedAssignees = [];
 $priorities = ['low', 'medium', 'high', 'critical'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -43,11 +44,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old['title'] = trim($_POST['title'] ?? '');
     $old['description'] = trim($_POST['description'] ?? '');
     $old['priority'] = trim($_POST['priority'] ?? 'medium');
-    $old['owner_id'] = (int)($_POST['owner_id'] ?? 0);
     $old['ticket_id'] = trim($_POST['ticket_id'] ?? '');
     $old['cr_id'] = trim($_POST['cr_id'] ?? '');
     $old['due_date'] = trim($_POST['due_date'] ?? '');
     $old['estimate'] = trim($_POST['estimate'] ?? '');
+
+    // Assignee tambahan (opsional): pembuat otomatis masuk sebagai owner + assignee #1
+    $postedAssignees = $_POST['assignee_ids'] ?? [];
+    if (!is_array($postedAssignees)) $postedAssignees = [$postedAssignees];
+    $postedAssignees = array_values(array_unique(array_filter(array_map('intval', $postedAssignees), fn($x) => $x > 0 && $x !== (int)$user['id'])));
 
     $err = null;
     if ($old['title'] === '' || $old['description'] === '' || $old['priority'] === '') {
@@ -58,14 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $err = 'Prioritas tidak valid.';
     }
 
-    // Owner opsional: bila diisi harus staf aktif
-    $ownerId = null;
-    if (!$err && $old['owner_id'] > 0) {
-        $chk = pg_query_params($conn, "SELECT id FROM users WHERE id = $1 AND is_active = TRUE AND role IN ('admin','teknisi')", [$old['owner_id']]);
-        if (!$chk || pg_num_rows($chk) === 0) $err = 'Owner tidak valid. Pilih staf aktif.';
-        else $ownerId = $old['owner_id'];
-        if ($chk) pg_free_result($chk);
-    }
+    // Owner otomatis = pembuat (yang login). Halaman ini khusus staf aktif,
+    // jadi pembuat selalu valid sebagai owner.
+    $ownerId = (int)$user['id'];
 
     // Relasi opsional: maksimal salah satu (tiket ATAU CR), harus exist
     $ticketId = null;
@@ -108,6 +108,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Validasi assignee tambahan: staf aktif, total (termasuk pembuat) maks 10
+    $allAssignees = array_merge([(int)$user['id']], $postedAssignees);
+    if (!$err && count($allAssignees) > 10) {
+        $err = 'Maksimal 10 assignee per todo.';
+    }
+    if (!$err && !empty($postedAssignees)) {
+        $place = [];
+        foreach ($postedAssignees as $i => $uid) $place[] = '$' . ($i + 1);
+        $achk = pg_query_params($conn, "SELECT id FROM users WHERE id IN (" . implode(',', $place) . ") AND is_active = TRUE AND role IN ('admin','teknisi')", $postedAssignees);
+        if (!$achk) {
+            $err = 'Gagal validasi assignee.';
+        } else {
+            $av = [];
+            while ($arow = pg_fetch_assoc($achk)) $av[] = (int)$arow['id'];
+            pg_free_result($achk);
+            sort($av);
+            $pw = $postedAssignees;
+            sort($pw);
+            if ($av !== $pw) $err = 'Assignee tidak valid. Hanya staf aktif (admin/teknisi).';
+        }
+    }
+
     if ($err) {
         $message = $err;
         $messageType = 'danger';
@@ -137,15 +159,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 [$taskId, $user['id'], 'Todo dibuat.']
             );
             if ($hi) {
-                pg_query($conn, 'COMMIT');
-                $createdId = $taskId;
-                $createdCode = $taskCode;
-                if ($ownerId && $ownerId !== (int)$user['id']) {
-                    notifyUser($conn, $ownerId, 'Todo baru ' . $taskCode . ' untuk Anda (' . $old['priority'] . ')', $old['title'], 'view_task.php?id=' . $createdId);
+                [$asOk, $asErr] = setTaskAssignees($conn, $taskId, $allAssignees, $user['id']);
+                $savedPaths = [];
+                if ($asOk) {
+                    [$upOk, $upErr] = saveTaskUploads($conn, $taskId, $user['id'], $savedPaths, 'attachments');
+                    if (!$upOk) {
+                        $asOk = false;
+                        $asErr = $upErr;
+                    }
                 }
-                $message = 'Todo ' . $taskCode . ' berhasil dibuat!';
-                $messageType = 'success';
-                $old = ['title' => '', 'description' => '', 'priority' => 'medium', 'owner_id' => $user['id'], 'ticket_id' => '', 'cr_id' => '', 'due_date' => '', 'estimate' => ''];
+                if ($asOk) {
+                    pg_query($conn, 'COMMIT');
+                    $createdId = $taskId;
+                    $createdCode = $taskCode;
+                    foreach ($postedAssignees as $aid) {
+                        notifyUser($conn, $aid, 'Todo baru ' . $taskCode . ' menugaskan Anda', $user['name'] . ': ' . $old['title'], 'view_task.php?id=' . $createdId);
+                    }
+                    $message = 'Todo ' . $taskCode . ' berhasil dibuat! Kamu otomatis jadi owner-nya.'
+                        . (!empty($postedAssignees) ? ' (' . count($postedAssignees) . ' assignee lain ditugaskan)' : '')
+                        . (!empty($savedPaths) ? ' (' . count($savedPaths) . ' lampiran tersimpan)' : '');
+                    $messageType = 'success';
+                    $old = ['title' => '', 'description' => '', 'priority' => 'medium', 'ticket_id' => '', 'cr_id' => '', 'due_date' => '', 'estimate' => ''];
+                } else {
+                    pg_query($conn, 'ROLLBACK');
+                    foreach ($savedPaths as $sp) {
+                        if (file_exists(__DIR__ . '/' . $sp)) @unlink(__DIR__ . '/' . $sp);
+                    }
+                    $message = $asErr ?: 'Gagal menyimpan assignee/lampiran.';
+                    $messageType = 'danger';
+                }
             } else {
                 pg_query($conn, 'ROLLBACK');
                 $message = 'Gagal menyimpan riwayat todo.';
@@ -177,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 <?php endif; ?>
 
-<form method="POST" id="taskForm" novalidate>
+<form method="POST" enctype="multipart/form-data" id="taskForm" novalidate>
     <?php echo csrf_field(); ?>
     <div class="row g-3 align-items-start">
         <div class="col-lg-8">
@@ -198,15 +240,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="card mb-3"><div class="card-body">
                 <h3 class="h6 mb-3">Pengaturan Todo</h3>
                 <div class="mb-3">
-                    <label for="owner_id" class="form-label">Owner <span class="text-secondary fw-normal">(opsional)</span></label>
-                    <select id="owner_id" name="owner_id" class="form-select">
-                        <option value="0">— Belum ada owner —</option>
-                        <?php foreach ($ownerOptions as $uo): ?>
-                            <option value="<?php echo $uo['id']; ?>" <?php echo (int)$old['owner_id'] === (int)$uo['id'] ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($uo['name']); ?> · @<?php echo htmlspecialchars($uo['username']); ?> (<?php echo htmlspecialchars($uo['role']); ?>)
-                            </option>
+                    <label class="form-label">Owner (Assigned)</label>
+                    <div class="alert alert-info py-2 mb-2 small">👤 <strong><?php echo htmlspecialchars($user['name']); ?></strong> — otomatis kamu sebagai pembuat.</div>
+                    <?php $staffOthers = array_values(array_filter($staffOptions, fn($s) => (int)$s['id'] !== (int)$user['id'])); ?>
+                    <?php if (!empty($staffOthers)): ?>
+                    <label class="form-label small">Tugaskan juga ke <span class="text-secondary fw-normal">(opsional, maks 9 tambahan)</span></label>
+                    <div class="border rounded-3 p-2" style="max-height:180px;overflow-y:auto;">
+                        <?php foreach ($staffOthers as $so): ?>
+                        <label class="form-check mb-1 small">
+                            <input type="checkbox" class="form-check-input" name="assignee_ids[]" value="<?php echo (int)$so['id']; ?>" <?php echo in_array((int)$so['id'], $postedAssignees, true) ? 'checked' : ''; ?>>
+                            <span class="form-check-label"><?php echo htmlspecialchars($so['name']); ?> <span class="text-secondary">(<?php echo htmlspecialchars($so['role']); ?>)</span></span>
+                        </label>
                         <?php endforeach; ?>
-                    </select>
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <div class="mb-3">
+                    <label for="attachments" class="form-label">Lampiran <span class="text-secondary fw-normal">(opsional · maks 10 file, total 20MB)</span></label>
+                    <input type="file" class="form-control" id="attachments" name="attachments[]" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar">
+                    <div class="form-text" id="attHelp">JPG, PNG, PDF, DOCX, XLSX, TXT, ZIP · total maksimal 20MB.</div>
                 </div>
                 <div class="mb-3">
                     <label for="priority" class="form-label">Prioritas</label>
@@ -288,6 +340,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (tk && cr && tk.value !== '' && cr.value !== '') {
                 e.preventDefault();
                 alert('Pilih salah satu relasi: tiket ATAU CR.');
+                return;
+            }
+            var att = document.getElementById('attachments');
+            if (att && att.files.length > 0) {
+                if (att.files.length > 10) {
+                    e.preventDefault();
+                    alert('Maksimal 10 file lampiran.');
+                    return;
+                }
+                var total = 0;
+                for (var i = 0; i < att.files.length; i++) total += att.files[i].size;
+                if (total > 20 * 1024 * 1024) {
+                    e.preventDefault();
+                    alert('Total lampiran maksimal 20MB (terpilih ' + (total / 1048576).toFixed(1) + 'MB).');
+                    return;
+                }
             }
         });
     }

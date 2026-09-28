@@ -59,9 +59,10 @@ if ($filterPriority !== '') {
 }
 if ($filterOwner === 'mine') {
     $params[] = $apiUser['id'];
-    $conds[] = 'd.owner_id = $' . count($params);
+    $n = count($params);
+    $conds[] = '(d.owner_id = $' . $n . ' OR EXISTS (SELECT 1 FROM dev_task_assignees a WHERE a.task_id = d.id AND a.user_id = $' . $n . '))';
 } elseif ($filterOwner === 'unassigned') {
-    $conds[] = 'd.owner_id IS NULL';
+    $conds[] = 'd.owner_id IS NULL AND NOT EXISTS (SELECT 1 FROM dev_task_assignees a WHERE a.task_id = d.id)';
 }
 if ($filterTicket > 0) {
     $params[] = $filterTicket;
@@ -97,7 +98,10 @@ $limN = count($params) + 1;
 $offN = count($params) + 2;
 $sql = "SELECT d.id, d.task_code, d.title, d.phase, d.priority, d.due_date, d.estimate_hours,
         d.created_at, d.updated_at, d.ticket_id, d.cr_id, d.owner_id,
-        u.name AS owner_name, t.ticket_number, c.cr_number
+        u.name AS owner_name, t.ticket_number, c.cr_number,
+        (SELECT string_agg(u2.name, ', ' ORDER BY u2.name) FROM dev_task_assignees a JOIN users u2 ON u2.id = a.user_id WHERE a.task_id = d.id) AS assignee_names,
+        (SELECT COUNT(*) FROM dev_task_assignees a2 WHERE a2.task_id = d.id) AS assignee_count,
+        (SELECT COUNT(*) FROM dev_task_attachments at WHERE at.task_id = d.id) AS attachment_count
         FROM dev_tasks d
         LEFT JOIN users u ON u.id = d.owner_id
         LEFT JOIN tickets t ON t.id = d.ticket_id
@@ -108,6 +112,9 @@ $rows = [];
 if ($res) {
     while ($r = pg_fetch_assoc($res)) {
         $r['is_overdue'] = !empty($r['due_date']) && $r['due_date'] < date('Y-m-d') && $r['phase'] !== 'done';
+        $r['assignee_count'] = (int)($r['assignee_count'] ?? 0);
+        $r['attachment_count'] = (int)($r['attachment_count'] ?? 0);
+        $r['has_attachment'] = $r['attachment_count'] > 0;
         $rows[] = $r;
     }
     pg_free_result($res);

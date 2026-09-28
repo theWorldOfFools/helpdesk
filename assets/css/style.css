@@ -192,6 +192,11 @@
 /* ===== Lampiran ===== */
 .attach-preview { width: 100%; max-height: 320px; object-fit: contain; background: #fff; border: 1px solid var(--bs-border-color); border-radius: 10px; margin-bottom: 12px; }
 
+/* ===== Board Todo drag-and-drop ===== */
+.task-card { cursor: grab; }
+.task-card.dragging { opacity: .45; cursor: grabbing; }
+[data-drop-phase].drop-hint { outline: 2px dashed var(--bs-primary); outline-offset: -2px; border-radius: 8px; }
+
 /* ===== Login (sisa custom di luar Bootstrap utilities) ===== */
 .guest-wrap { min-height: 100vh; }
 .login-page {

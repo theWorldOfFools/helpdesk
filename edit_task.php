@@ -57,6 +57,11 @@ if ($crq) {
     pg_free_result($crq);
 }
 
+// Assignees existing + kandidat (kelola: admin + pembuat)
+$currentAssignees = getTaskAssignees($conn, $id);
+$currentAssigneeIds = array_map(fn($a) => (int)$a['id'], $currentAssignees);
+$canManageAsg = canManageAssignees($task, $user);
+
 $message = '';
 $messageType = '';
 
@@ -66,7 +71,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $descRaw = trim($_POST['description'] ?? '');
     $priority = trim($_POST['priority'] ?? '');
     $phase = trim($_POST['phase'] ?? '');
-    $ownerPost = (int)($_POST['owner_id'] ?? 0);
+    // Owner = pembuat; hanya admin yang boleh reassign. Non-admin: pertahankan owner lama.
+    $isAdminEditor = (($user['role'] ?? '') === 'admin');
+    $ownerPost = $isAdminEditor ? (int)($_POST['owner_id'] ?? 0) : 0;
+    // Assignee hanya diproses bila boleh kelola (admin/pembuat); sisanya abaikan POST
+    $postedAssigneeIds = [];
+    if ($canManageAsg) {
+        $pa = $_POST['assignee_ids'] ?? [];
+        if (!is_array($pa)) $pa = [$pa];
+        $postedAssigneeIds = array_values(array_unique(array_filter(array_map('intval', $pa), fn($x) => $x > 0)));
+    } else {
+        $postedAssigneeIds = $currentAssigneeIds;
+    }
     $ticketPost = trim($_POST['ticket_id'] ?? '');
     $crPost = trim($_POST['cr_id'] ?? '');
     $duePost = trim($_POST['due_date'] ?? '');
@@ -83,12 +99,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $err = 'Fase tidak valid.';
     }
 
-    $ownerId = null;
-    if (!$err && $ownerPost > 0) {
-        $chk = pg_query_params($conn, "SELECT id FROM users WHERE id = $1 AND is_active = TRUE AND role IN ('admin','teknisi')", [$ownerPost]);
-        if (!$chk || pg_num_rows($chk) === 0) $err = 'Owner tidak valid.';
-        else $ownerId = $ownerPost;
-        if ($chk) pg_free_result($chk);
+    $ownerId = $task['owner_id'] !== null ? (int)$task['owner_id'] : null;
+    if ($isAdminEditor) {
+        $ownerId = null;
+        if (!$err && $ownerPost > 0) {
+            $chk = pg_query_params($conn, "SELECT id FROM users WHERE id = $1 AND is_active = TRUE AND role IN ('admin','teknisi')", [$ownerPost]);
+            if (!$chk || pg_num_rows($chk) === 0) $err = 'Owner tidak valid.';
+            else $ownerId = $ownerPost;
+            if ($chk) pg_free_result($chk);
+        }
     }
     $ticketId = null;
     $crId = null;
@@ -118,6 +137,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!ctype_digit($estPost) || (int)$estPost < 1 || (int)$estPost > 1000) $err = 'Estimasi jam harus angka 1-1000.';
         else $estimate = (int)$estPost;
     }
+    if (!$err && $canManageAsg && count($postedAssigneeIds) > 10) {
+        $err = 'Maksimal 10 assignee per todo.';
+    }
+    if (!$err && $canManageAsg && !empty($postedAssigneeIds)) {
+        $place = [];
+        foreach ($postedAssigneeIds as $i => $uid) $place[] = '$' . ($i + 1);
+        $gchk = pg_query_params($conn, "SELECT id FROM users WHERE id IN (" . implode(',', $place) . ") AND is_active = TRUE AND role IN ('admin','teknisi')", $postedAssigneeIds);
+        if (!$gchk) {
+            $err = 'Gagal validasi assignee.';
+        } else {
+            $gv = [];
+            while ($grow = pg_fetch_assoc($gchk)) $gv[] = (int)$grow['id'];
+            pg_free_result($gchk);
+            sort($gv);
+            $gw = $postedAssigneeIds;
+            sort($gw);
+            if ($gv !== $gw) $err = 'Assignee tidak valid. Hanya staf aktif (admin/teknisi).';
+        }
+    }
 
     if ($err) {
         $message = $err;
@@ -131,6 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $task['cr_id'] = $crId;
         $task['due_date'] = $dueDate;
         $task['estimate_hours'] = $estimate;
+        $currentAssigneeIds = $postedAssigneeIds;
     } else {
         $description = sanitizeRichText($descRaw);
         if ($description === '') $description = htmlspecialchars($descRaw);
@@ -153,20 +192,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $ok = (bool)$hi;
         }
+        if ($ok && $canManageAsg) {
+            [$gasOk, $gasErr] = setTaskAssignees($conn, $id, $postedAssigneeIds, $user['id']);
+            if (!$gasOk) {
+                $ok = false;
+                $asgFailMsg = $gasErr;
+            }
+        }
         if ($ok) {
             pg_query($conn, 'COMMIT');
             if ($ownerId && $ownerId !== (int)$user['id'] && $ownerId !== (int)$task['owner_id']) {
                 notifyUser($conn, $ownerId, 'Todo ' . $task['task_code'] . ' diassign ke Anda', $user['name'] . ' mengubah todo: ' . $title, 'view_task.php?id=' . $id);
+            }
+            $newOnes = array_diff($postedAssigneeIds, $currentAssigneeIds);
+            foreach ($newOnes as $nid) {
+                if ($nid !== (int)$user['id']) notifyUser($conn, $nid, 'Todo ' . $task['task_code'] . ' menugaskan Anda', $user['name'] . ': ' . $title, 'view_task.php?id=' . $id);
             }
             $message = 'Todo berhasil diperbarui!';
             $messageType = 'success';
             $r2 = pg_query_params($conn, "SELECT * FROM dev_tasks WHERE id = $1", [$id]);
             $task = pg_fetch_assoc($r2);
             pg_free_result($r2);
+            $currentAssignees = getTaskAssignees($conn, $id);
+            $currentAssigneeIds = array_map(fn($a) => (int)$a['id'], $currentAssignees);
         } else {
             pg_query($conn, 'ROLLBACK');
-            $message = 'Gagal memperbarui todo: ' . pg_last_error($conn);
+            $message = isset($asgFailMsg) ? $asgFailMsg : ('Gagal memperbarui todo: ' . pg_last_error($conn));
             $messageType = 'danger';
+            $currentAssigneeIds = $postedAssigneeIds;
         }
     }
 }
@@ -218,13 +271,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="owner_id" class="form-label">Owner</label>
+                    <label class="form-label">Owner (Assigned)</label>
+                    <?php if (($user['role'] ?? '') === 'admin'): ?>
                     <select id="owner_id" name="owner_id" class="form-select">
                         <option value="0">— Belum ada owner —</option>
                         <?php foreach ($ownerOptions as $uo): ?>
                             <option value="<?php echo $uo['id']; ?>" <?php echo (int)$task['owner_id'] === (int)$uo['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($uo['name']); ?> (<?php echo htmlspecialchars($uo['role']); ?>)</option>
                         <?php endforeach; ?>
                     </select>
+                    <?php else: ?>
+                    <?php $ownerLabel = '—'; foreach ($ownerOptions as $uo) { if ((int)$task['owner_id'] === (int)$uo['id']) { $ownerLabel = $uo['name']; break; } } ?>
+                    <div class="alert alert-info py-2 mb-0 small">👤 <strong><?php echo htmlspecialchars($ownerLabel); ?></strong> — hanya admin yang bisa reassign.</div>
+                    <?php endif; ?>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Assignees <span class="text-secondary fw-normal">(bisa lebih dari satu · maks 10)</span></label>
+                    <?php if ($canManageAsg): ?>
+                    <div class="border rounded-3 p-2" style="max-height:180px;overflow-y:auto;">
+                        <?php foreach ($ownerOptions as $uo): ?>
+                        <label class="form-check mb-1 small">
+                            <input type="checkbox" class="form-check-input" name="assignee_ids[]" value="<?php echo (int)$uo['id']; ?>" <?php echo in_array((int)$uo['id'], $currentAssigneeIds, true) ? 'checked' : ''; ?>>
+                            <span class="form-check-label"><?php echo htmlspecialchars($uo['name']); ?> <span class="text-secondary">(<?php echo htmlspecialchars($uo['role']); ?>)</span></span>
+                        </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php else: ?>
+                    <div class="d-flex gap-1 flex-wrap">
+                        <?php foreach ($currentAssignees as $ca): ?><span class="badge text-bg-primary"><?php echo htmlspecialchars($ca['name']); ?></span><?php endforeach; ?>
+                        <?php if (empty($currentAssignees)): ?><span class="text-secondary small">—</span><?php endif; ?>
+                    </div>
+                    <div class="form-text">Hanya admin/pembuat yang bisa mengubah assignees.</div>
+                    <?php endif; ?>
                 </div>
                 <div class="row g-2">
                     <div class="col-6">
