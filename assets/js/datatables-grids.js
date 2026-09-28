@@ -171,7 +171,8 @@
       var cfilters = {
         search: cqs.get('search') || '',
         filter_status: cqs.get('filter_status') || '',
-        filter_priority: cqs.get('filter_priority') || ''
+        filter_priority: cqs.get('filter_priority') || '',
+        pic: cqs.get('pic') || ''
       };
       var crFallback = document.getElementById('tbl-cr-fallback-wrap');
       if (crFallback) crFallback.style.display = 'none';
@@ -190,12 +191,13 @@
             d.search = cfilters.search;
             d.filter_status = cfilters.filter_status;
             d.filter_priority = cfilters.filter_priority;
+            d.pic = cfilters.pic;
           },
           error: function (xhr) {
             if (xhr && xhr.status === 401) window.location.href = 'login.php';
           }
         },
-        order: [[6, 'desc']],
+        order: [[7, 'desc']],
         columns: [
           {
             data: 'cr_number', title: 'CR Number',
@@ -216,6 +218,18 @@
           },
           { data: 'modul', title: 'Modul', render: function (d, t) { return t !== 'display' ? d : esc(d); } },
           { data: 'fitur', title: 'Fitur', render: function (d, t, row) { return t !== 'display' ? d : esc(String(row.fitur || '').substring(0, 60)); } },
+          {
+            data: 'pic_names', title: 'PIC',
+            render: function (data, type, row) {
+              if (type !== 'display') return data;
+              var n = parseInt(row.pic_count || 0, 10);
+              if (!n) return '<span class="text-secondary">—</span>';
+              var names = String(row.pic_names || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+              var h = names.slice(0, 2).map(function (x) { return '<span class="badge text-bg-primary">' + esc(x) + '</span>'; }).join(' ');
+              if (names.length > 2) h += ' <span class="badge text-bg-secondary">+' + (names.length - 2) + '</span>';
+              return h;
+            }
+          },
           {
             data: 'status', title: 'Status',
             render: function (data, type, row) {
@@ -257,6 +271,7 @@
           cfilters.search = (fd.get('search') || '').toString();
           cfilters.filter_status = (fd.get('filter_status') || '').toString();
           cfilters.filter_priority = (fd.get('filter_priority') || '').toString();
+          cfilters.pic = (fd.get('pic') || '').toString();
           crDt.ajax.reload();
         });
       }

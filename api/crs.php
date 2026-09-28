@@ -22,6 +22,8 @@ $filterStatus = trim($_GET['filter_status'] ?? '');
 $filterPriority = trim($_GET['filter_priority'] ?? '');
 $filterAplikasi = trim($_GET['aplikasi'] ?? '');
 $assignee = trim($_GET['assignee'] ?? '');
+$filterPic = trim($_GET['pic'] ?? '');
+if (!in_array($filterPic, ['mine', 'unassigned'], true)) $filterPic = '';
 $overdue = ($_GET['overdue'] ?? '') === '1';
 $dateFrom = trim($_GET['date_from'] ?? '');
 $dateTo = trim($_GET['date_to'] ?? '');
@@ -68,9 +70,16 @@ if ($filterAplikasi !== '') {
 }
 if ($assignee === 'mine') {
     $params[] = $apiUser['id'];
-    $conds[] = 'cr.assigned_to = $' . count($params);
+    $n = count($params);
+    $conds[] = '(cr.assigned_to = $' . $n . ' OR EXISTS (SELECT 1 FROM change_request_pics p WHERE p.cr_id = cr.id AND p.user_id = $' . $n . '))';
 } elseif ($assignee === 'unassigned') {
     $conds[] = 'cr.assigned_to IS NULL';
+}
+if ($filterPic === 'mine') {
+    $params[] = $apiUser['id'];
+    $conds[] = 'EXISTS (SELECT 1 FROM change_request_pics p WHERE p.cr_id = cr.id AND p.user_id = $' . count($params) . ')';
+} elseif ($filterPic === 'unassigned') {
+    $conds[] = 'NOT EXISTS (SELECT 1 FROM change_request_pics p WHERE p.cr_id = cr.id)';
 }
 if ($overdue) {
     $conds[] = "cr.sla_due_at IS NOT NULL AND cr.sla_due_at < NOW() AND cr.status NOT IN ('resolved','closed')";
@@ -125,6 +134,8 @@ $offN = count($params) + 2;
 $sql = "SELECT cr.id, cr.cr_number, cr.aplikasi, cr.unit, cr.modul, cr.fitur, cr.priority, cr.status,
         cr.created_at, cr.updated_at, cr.waktu_dibutuhkan, cr.attachment_path, cr.attachment_original,
         cr.assigned_to, cr.sla_due_at, u.name AS reporter_name, a.name AS assignee_name,
+        (SELECT string_agg(u2.name, ', ' ORDER BY u2.name) FROM change_request_pics p JOIN users u2 ON u2.id = p.user_id WHERE p.cr_id = cr.id) AS pic_names,
+        (SELECT COUNT(*) FROM change_request_pics p2 WHERE p2.cr_id = cr.id) AS pic_count,
         (SELECT COUNT(*) FROM change_request_items i WHERE i.cr_id = cr.id) AS item_count
         FROM change_requests cr
         LEFT JOIN users u ON cr.user_id = u.id
@@ -137,6 +148,7 @@ if ($res) {
         $r['has_attachment'] = !empty($r['attachment_path']);
         $r['is_overdue'] = !empty($r['sla_due_at']) && strtotime($r['sla_due_at']) < time() && !in_array($r['status'], ['resolved', 'closed'], true);
         $r['item_count'] = (int)($r['item_count'] ?? 0);
+        $r['pic_count'] = (int)($r['pic_count'] ?? 0);
         $rows[] = $r;
     }
     pg_free_result($res);

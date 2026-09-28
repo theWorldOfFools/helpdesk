@@ -38,6 +38,65 @@ if (!canActOnCr($cr, $user)) {
 
 $from = $cr['status'];
 
+// ---- Kelola PIC multi-person: admin only, tanpa wajib catatan status ----
+if ($action === 'pic_add' || $action === 'pic_remove') {
+    if (!canManageCrPic($cr, $user)) {
+        pg_close($conn);
+        $_SESSION['flash_error'] = 'Hanya admin yang boleh menambah/menghapus PIC CR.';
+        header('Location: view_cr.php?id=' . $id);
+        exit;
+    }
+    $picUserId = (int)($_POST['pic_user_id'] ?? 0);
+    if ($picUserId <= 0) {
+        pg_close($conn);
+        $_SESSION['flash_error'] = 'Pilih user PIC terlebih dahulu.';
+        header('Location: view_cr.php?id=' . $id);
+        exit;
+    }
+    $cand = pg_query_params($conn, "SELECT id, name FROM users WHERE id = $1 AND is_active = TRUE AND role IN ('admin','teknisi')", [$picUserId]);
+    $candName = ($cand && pg_num_rows($cand) > 0) ? pg_fetch_result($cand, 0, 1) : null;
+    if ($cand) pg_free_result($cand);
+    if ($candName === null) {
+        pg_close($conn);
+        $_SESSION['flash_error'] = 'Kandidat PIC tidak valid. Hanya user aktif role admin/teknisi.';
+        header('Location: view_cr.php?id=' . $id);
+        exit;
+    }
+
+    pg_query($conn, 'BEGIN');
+    try {
+        $cur = pg_query_params($conn, "SELECT user_id FROM change_request_pics WHERE cr_id = $1", [$id]);
+        $ids = [];
+        if ($cur) {
+            while ($row = pg_fetch_assoc($cur)) $ids[] = (int)$row['user_id'];
+            pg_free_result($cur);
+        }
+        if ($action === 'pic_add') {
+            if (!in_array($picUserId, $ids, true)) $ids[] = $picUserId;
+            if (count($ids) > 10) throw new Exception('Maksimal 10 PIC per CR.');
+            $noteHist = 'PIC ditambahkan oleh admin: ' . $candName . '.';
+        } else {
+            $ids = array_values(array_filter($ids, fn($x) => $x !== $picUserId));
+            $noteHist = 'PIC dihapus oleh admin: ' . $candName . '.';
+        }
+        [$ok, $setErr] = setCrPics($conn, $id, $ids, $user['id']);
+        if (!$ok) throw new Exception($setErr ?: 'Gagal menyimpan PIC.');
+        $h = pg_query_params($conn, "INSERT INTO change_request_history (cr_id, actor_id, from_status, to_status, note) VALUES ($1,$2,$3,$4,$5)", [$id, $user['id'], $from, $from, $noteHist]);
+        if (!$h) throw new Exception('Gagal simpan riwayat.');
+        pg_query($conn, 'COMMIT');
+        if ($action === 'pic_add' && $picUserId !== (int)$user['id']) {
+            notifyUser($conn, $picUserId, 'CR ' . $cr['cr_number'] . ' menunjuk Anda sebagai PIC', $user['name'] . ': ' . $noteHist, 'view_cr.php?id=' . $id);
+        }
+        $_SESSION['flash_ok'] = $action === 'pic_add' ? ('PIC ' . $candName . ' ditambahkan.') : ('PIC ' . $candName . ' dihapus.');
+    } catch (Exception $ex) {
+        pg_query($conn, 'ROLLBACK');
+        $_SESSION['flash_error'] = $ex->getMessage();
+    }
+    pg_close($conn);
+    header('Location: view_cr.php?id=' . $id);
+    exit;
+}
+
 // Peta aksi fleksibel (mirror tiket: staf boleh loncat open->resolved + reopen sendiri)
 $map = [
     // action => [from_allowed, to, assign_self?, set_resolved?, set_closed?, clear_dates?]
@@ -115,6 +174,18 @@ try {
                 $closedAt = null;
                 if (in_array($from, ['resolved', 'closed', 'open'], true)) $resolvedAt = null;
             }
+        }
+
+        // Sinkron tabel PIC multi-person dengan assigned_to tunggal (kompatibel):
+        // - aksi yang assign ke diri sendiri (take/reopen_progress/...) otomatis masuk daftar PIC
+        // - unassign mengosongkan daftar PIC (kembali ke antrean)
+        if ($assignSelf) {
+            $ap = pg_query_params($conn, "INSERT INTO change_request_pics (cr_id, user_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [$id, $user['id'], $user['id']]);
+            if (!$ap) throw new Exception('Gagal sinkron PIC: ' . pg_last_error($conn));
+        }
+        if ($action === 'unassign') {
+            $dp = pg_query_params($conn, "DELETE FROM change_request_pics WHERE cr_id = $1", [$id]);
+            if (!$dp) throw new Exception('Gagal bersihkan PIC: ' . pg_last_error($conn));
         }
 
         $u = pg_query_params($conn, "UPDATE change_requests SET status=$1, assigned_to=$2, resolved_at=$3, closed_at=$4, updated_at=NOW() WHERE id=$5", [$to, $newAssigned, $resolvedAt, $closedAt, $id]);

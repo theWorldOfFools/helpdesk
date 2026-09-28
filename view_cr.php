@@ -71,6 +71,17 @@ if ($cr2) {
     pg_free_result($cr2);
 }
 
+// PIC multi-person (tabel change_request_pics; assigned_to tetap disinkron sbg kompatibel)
+$pics = getCrPics($conn, $id);
+$picIds = array_map(fn($p) => (int)$p['id'], $pics);
+$canManagePic = canManageCrPic($cr, $user);
+$picCandidates = [];
+if ($canManagePic) {
+    foreach (getCrPicCandidates($conn) as $c) {
+        if (!in_array((int)$c['id'], $picIds, true)) $picCandidates[] = $c;
+    }
+}
+
 // Tombol kontekstual per status (mirror view_ticket.php)
 $st = $cr['status'];
 $canAct = canActOnCr($cr, $user);
@@ -212,10 +223,40 @@ function crJenisBadge($jenis) {
                 <?php if (!empty($cr['waktu_dibutuhkan'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Dibutuhkan</span><strong><?php echo date('d M Y H:i', strtotime($cr['waktu_dibutuhkan'])); ?></strong></li><?php endif; ?>
                 <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Pelapor</span><strong class="text-end"><?php echo e($cr['reporter_name'] ?? '-'); ?><?php echo !empty($cr['reporter_username']) ? ' (@' . e($cr['reporter_username']) . ')' : ''; ?></strong></li>
                 <?php if (!empty($cr['reporter_role'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Role Pelapor</span><span class="status-badge status-<?php echo e($cr['reporter_role']); ?>"><?php echo e($cr['reporter_role']); ?></span></li><?php endif; ?>
-                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Ditangani oleh</span><strong><?php echo e($cr['assignee_name'] ?? '— Belum diassign —'); ?></strong></li>
+                <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Ditangani oleh</span><span class="text-end"><?php if (!empty($pics)): ?><?php foreach ($pics as $p): ?> <span class="badge text-bg-primary"><?php echo e($p['name']); ?></span><?php endforeach; ?><?php else: ?><strong><?php echo e($cr['assignee_name'] ?? '— Belum diassign —'); ?></strong><?php endif; ?></span></li>
                 <?php if (!empty($cr['sla_due_at'])): ?><li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Jatuh tempo SLA</span><strong><?php echo date('d M Y H:i', strtotime($cr['sla_due_at'])); ?></strong></li><?php endif; ?>
                 <li class="list-group-item d-flex justify-content-between gap-2 px-0"><span class="text-secondary">Lampiran</span><strong><?php echo $attachOk ? 'Ada (1 file)' : 'Tidak ada'; ?></strong></li>
             </ul>
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                <h3 class="h6 mb-0">PIC Penanggung Jawab (<?php echo count($pics); ?>)</h3>
+                <?php if ($canManagePic && !empty($picCandidates)): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#picModal">+ Tambah PIC</button>
+                <?php endif; ?>
+            </div>
+            <?php if (!empty($pics)): ?>
+                <ul class="list-group list-group-flush">
+                <?php foreach ($pics as $p): ?>
+                    <li class="list-group-item px-0 d-flex justify-content-between align-items-center gap-2">
+                        <span><strong><?php echo e($p['name']); ?></strong><br><small class="text-secondary">@<?php echo e($p['username']); ?> · <?php echo e($p['role']); ?></small></span>
+                        <?php if ($canManagePic): ?>
+                            <form method="POST" action="cr_action.php" class="d-inline" onsubmit="return confirm('Hapus <?php echo e($p['name']); ?> dari PIC CR ini?')">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="id" value="<?php echo $cr['id']; ?>">
+                                <input type="hidden" name="action" value="pic_remove">
+                                <input type="hidden" name="pic_user_id" value="<?php echo (int)$p['id']; ?>">
+                                <button type="submit" class="btn btn-outline-danger btn-sm" title="Hapus PIC">×</button>
+                            </form>
+                        <?php endif; ?>
+                    </li>
+                <?php endforeach; ?>
+                </ul>
+            <?php else: ?>
+                <p class="text-secondary small mb-0">Belum ada PIC.<?php echo $canManagePic ? ' Admin bisa menunjuk PIC via tombol di atas.' : ''; ?></p>
+            <?php endif; ?>
+            <?php if ($canManagePic): ?><p class="small text-secondary mt-2 mb-0">Hanya admin yang bisa menambah/menghapus PIC.</p><?php endif; ?>
         </div></div>
 
         <?php if (!empty($actions) || $canAct): ?>
@@ -272,6 +313,38 @@ function crJenisBadge($jenis) {
     </form>
   </div>
 </div>
+<?php if ($canManagePic): ?>
+<div class="modal fade" id="picModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="POST" action="cr_action.php" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tambah PIC — <?php echo e($cr['cr_number']); ?></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body">
+        <?php echo csrf_field(); ?>
+        <input type="hidden" name="id" value="<?php echo $cr['id']; ?>">
+        <input type="hidden" name="action" value="pic_add">
+        <?php if (!empty($picCandidates)): ?>
+        <label for="picUserSelect" class="form-label">Pilih PIC <span class="text-secondary">(admin/teknisi aktif)</span></label>
+        <select name="pic_user_id" id="picUserSelect" class="form-select" required>
+          <option value="">Pilih user…</option>
+          <?php foreach ($picCandidates as $c): ?>
+            <option value="<?php echo (int)$c['id']; ?>"><?php echo e($c['name']); ?> · @<?php echo e($c['username']); ?> (<?php echo e($c['role']); ?>)</option>
+          <?php endforeach; ?>
+        </select>
+        <?php else: ?>
+        <p class="text-secondary small mb-0">Semua kandidat admin/teknisi sudah menjadi PIC (maks 10).</p>
+        <?php endif; ?>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
+        <?php if (!empty($picCandidates)): ?><button type="submit" class="btn btn-primary btn-sm">Tambah PIC</button><?php endif; ?>
+      </div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   var modal = document.getElementById('actionModal');

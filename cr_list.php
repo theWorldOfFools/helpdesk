@@ -18,6 +18,7 @@ $conn = getDBConnection();
 $search = trim($_GET['search'] ?? '');
 $filterStatus = trim($_GET['filter_status'] ?? '');
 $filterPriority = trim($_GET['filter_priority'] ?? '');
+$filterPic = trim($_GET['pic'] ?? '');
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 15;
 
@@ -25,6 +26,7 @@ $validStatus = ['open', 'in_progress', 'resolved', 'closed'];
 $validPriority = ['low', 'medium', 'high', 'critical'];
 if (!in_array($filterStatus, $validStatus, true)) $filterStatus = '';
 if (!in_array($filterPriority, $validPriority, true)) $filterPriority = '';
+if (!in_array($filterPic, ['mine', 'unassigned'], true)) $filterPic = '';
 
 $conds = ['1=1'];
 $params = [];
@@ -44,6 +46,12 @@ if ($filterPriority !== '') {
     $params[] = $filterPriority;
     $conds[] = 'cr.priority = $' . count($params);
 }
+if ($filterPic === 'mine') {
+    $params[] = $user['id'];
+    $conds[] = 'EXISTS (SELECT 1 FROM change_request_pics p WHERE p.cr_id = cr.id AND p.user_id = $' . count($params) . ')';
+} elseif ($filterPic === 'unassigned') {
+    $conds[] = 'NOT EXISTS (SELECT 1 FROM change_request_pics p WHERE p.cr_id = cr.id)';
+}
 $where = implode(' AND ', $conds);
 
 $cntR = pg_query_params($conn, "SELECT COUNT(*) FROM change_requests cr WHERE $where", $params);
@@ -58,7 +66,7 @@ $limN = count($params) + 1;
 $offN = count($params) + 2;
 $result = pg_query_params(
     $conn,
-    "SELECT cr.*, u.name AS reporter_name FROM change_requests cr LEFT JOIN users u ON cr.user_id = u.id WHERE $where ORDER BY cr.created_at DESC LIMIT \$$limN OFFSET \$$offN",
+    "SELECT cr.*, u.name AS reporter_name, (SELECT string_agg(u2.name, ', ' ORDER BY u2.name) FROM change_request_pics p JOIN users u2 ON u2.id = p.user_id WHERE p.cr_id = cr.id) AS pic_names, (SELECT COUNT(*) FROM change_request_pics p2 WHERE p2.cr_id = cr.id) AS pic_count FROM change_requests cr LEFT JOIN users u ON cr.user_id = u.id WHERE $where ORDER BY cr.created_at DESC LIMIT \$$limN OFFSET \$$offN",
     $dataParams
 );
 $crs = [];
@@ -86,7 +94,7 @@ function crKeepQS($over = []) {
     unset($q['page']);
     return http_build_query($q);
 }
-$hasFilter = $search !== '' || $filterStatus !== '' || $filterPriority !== '';
+$hasFilter = $search !== '' || $filterStatus !== '' || $filterPriority !== '' || $filterPic !== '';
 ?>
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
@@ -129,7 +137,7 @@ $hasFilter = $search !== '' || $filterStatus !== '' || $filterPriority !== '';
 <div class="card mb-4">
     <div class="card-body">
         <form method="GET" data-cr-filter class="row g-2 align-items-center">
-            <div class="col-12 col-lg-5">
+            <div class="col-12 col-lg-4">
                 <div class="input-group">
                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                     <input type="text" class="form-control" name="search" placeholder="Cari nomor CR, aplikasi, modul, fitur…" value="<?php echo htmlspecialchars($search); ?>">
@@ -145,6 +153,13 @@ $hasFilter = $search !== '' || $filterStatus !== '' || $filterPriority !== '';
                 <select name="filter_priority" class="form-select" aria-label="Filter prioritas">
                     <option value="">Semua Prioritas</option>
                     <?php foreach ($validPriority as $p): ?><option value="<?php echo $p; ?>" <?php echo $filterPriority === $p ? 'selected' : ''; ?>><?php echo ucfirst($p); ?></option><?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <select name="pic" class="form-select" aria-label="Filter PIC">
+                    <option value="">Semua PIC</option>
+                    <option value="mine" <?php echo $filterPic === 'mine' ? 'selected' : ''; ?>>PIC saya</option>
+                    <option value="unassigned" <?php echo $filterPic === 'unassigned' ? 'selected' : ''; ?>>Belum ada PIC</option>
                 </select>
             </div>
             <div class="col-6 col-lg-auto d-flex gap-2 align-items-center">
@@ -165,6 +180,7 @@ $hasFilter = $search !== '' || $filterStatus !== '' || $filterPriority !== '';
                 <th>Aplikasi</th>
                 <th>Modul</th>
                 <th>Fitur</th>
+                <th>PIC</th>
                 <th>Status</th>
                 <th>Prioritas</th>
                 <th>Waktu</th>
@@ -197,6 +213,7 @@ $hasFilter = $search !== '' || $filterStatus !== '' || $filterPriority !== '';
                         <td><?php echo htmlspecialchars($row['aplikasi']); ?><br><small class="text-secondary"><?php echo htmlspecialchars($row['reporter_name'] ?? '-'); ?></small></td>
                         <td><?php echo htmlspecialchars($row['modul']); ?></td>
                         <td><?php echo htmlspecialchars(mb_strimwidth($row['fitur'], 0, 60, '…')); ?></td>
+                        <td><?php $pc = (int)($row['pic_count'] ?? 0); if ($pc > 0): ?><?php $pn = array_filter(array_map('trim', explode(',', (string)($row['pic_names'] ?? '')))); $shown = array_slice($pn, 0, 2); ?><?php foreach ($shown as $nm): ?> <span class="badge text-bg-primary"><?php echo htmlspecialchars($nm); ?></span><?php endforeach; ?><?php if (count($pn) > 2): ?> <span class="badge text-bg-secondary">+<?php echo count($pn) - 2; ?></span><?php endif; ?><?php else: ?><span class="text-secondary">—</span><?php endif; ?></td>
                         <td><span class="status-badge status-<?php echo $row['status']; ?>"><?php echo htmlspecialchars($row['status']); ?></span></td>
                         <td><span class="priority-badge priority-<?php echo strtolower($row['priority']); ?>"><?php echo htmlspecialchars($row['priority']); ?></span></td>
                         <td class="text-nowrap small"><?php echo !empty($row['waktu_dibutuhkan']) ? date('d M Y H:i', strtotime($row['waktu_dibutuhkan'])) : '<span class="text-secondary">-</span>'; ?><br><small class="text-secondary">buat: <?php echo date('d M Y', strtotime($row['created_at'])); ?></small></td>

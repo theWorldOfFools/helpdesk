@@ -56,6 +56,11 @@ if ($ur) {
     pg_free_result($ur);
 }
 
+// PIC multi-person existing + kandidat (admin/teknisi aktif)
+$currentPics = getCrPics($conn, $id);
+$currentPicIds = array_map(fn($p) => (int)$p['id'], $currentPics);
+$picCandidates = getCrPicCandidates($conn);
+
 $message = '';
 $messageType = '';
 
@@ -85,6 +90,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($chk && pg_num_rows($chk) > 0) $reportFor = $cand;
         if ($chk) pg_free_result($chk);
     }
+
+    // PIC multi-person (admin only — halaman ini sudah canEditCr)
+    $postedPicIds = $_POST['pic_ids'] ?? [];
+    if (!is_array($postedPicIds)) $postedPicIds = [$postedPicIds];
+    $postedPicIds = array_values(array_unique(array_filter(array_map('intval', $postedPicIds), fn($x) => $x > 0)));
 
     // Tabel dinamis paralel (mirror create_cr.php)
     $postJenis = $_POST['jenis'] ?? [];
@@ -177,6 +187,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Validasi PIC multi-person: opsional (boleh kosong = belum diassign),
+    // maks 10, hanya user aktif role admin/teknisi.
+    if (!$err && count($postedPicIds) > 10) {
+        $err = 'Maksimal 10 PIC per CR.';
+    }
+    if (!$err && !empty($postedPicIds)) {
+        $place = [];
+        foreach ($postedPicIds as $i => $uid) $place[] = '$' . ($i + 1);
+        $pchk = pg_query_params($conn, "SELECT id FROM users WHERE id IN (" . implode(',', $place) . ") AND is_active = TRUE AND role IN ('admin','teknisi')", $postedPicIds);
+        if (!$pchk) {
+            $err = 'Gagal validasi PIC.';
+        } else {
+            $pv = [];
+            while ($prow = pg_fetch_assoc($pchk)) $pv[] = (int)$prow['id'];
+            pg_free_result($pchk);
+            sort($pv);
+            $pw = $postedPicIds;
+            sort($pw);
+            if ($pv !== $pw) $err = 'PIC tidak valid. Hanya user aktif role admin/teknisi.';
+        }
+    }
+
     if ($err) {
         $message = $err;
         $messageType = 'danger';
@@ -191,6 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cr['user_id'] = $reportFor;
         $cr['keterangan'] = $keteranganRaw;
         $existingItems = $postedItems;
+        $currentPicIds = $postedPicIds;
     } else {
         $newPath = $cr['attachment_path'];
         $newOriginal = $cr['attachment_original'];
@@ -240,6 +273,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             if ($ok) {
+                [$picOk, $picErr] = setCrPics($conn, $id, $postedPicIds, $user['id']);
+                if (!$picOk) {
+                    $ok = false;
+                    $picFailMsg = $picErr ?: 'Gagal menyimpan PIC.';
+                }
+            }
+            if ($ok) {
                 $hi = pg_query_params(
                     $conn,
                     "INSERT INTO change_request_history (cr_id, actor_id, from_status, to_status, note) VALUES ($1,$2,$3,$4,$5)",
@@ -256,11 +296,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $cr = pg_fetch_assoc($r2);
                 pg_free_result($r2);
                 $existingItems = $validItems;
+                $currentPics = getCrPics($conn, $id);
+                $currentPicIds = array_map(fn($p) => (int)$p['id'], $currentPics);
             } else {
                 pg_query($conn, 'ROLLBACK');
                 if ($upPath && file_exists(__DIR__ . '/' . $upPath)) @unlink(__DIR__ . '/' . $upPath);
-                $message = 'Gagal memperbarui CR: ' . pg_last_error($conn);
+                $message = isset($picFailMsg) ? $picFailMsg : ('Gagal memperbarui CR: ' . pg_last_error($conn));
                 $messageType = 'danger';
+                $currentPicIds = $postedPicIds;
             }
         }
     }
@@ -386,6 +429,22 @@ $todayMin = date('Y-m-d') . 'T00:00';
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">PIC Penanggung Jawab <span class="text-secondary fw-normal">(bisa lebih dari satu · maks 10)</span></label>
+                    <?php if (!empty($picCandidates)): ?>
+                    <div class="border rounded-3 p-2" style="max-height:220px;overflow-y:auto;">
+                        <?php foreach ($picCandidates as $pc): ?>
+                        <label class="form-check mb-1">
+                            <input type="checkbox" class="form-check-input" name="pic_ids[]" value="<?php echo (int)$pc['id']; ?>" <?php echo in_array((int)$pc['id'], $currentPicIds, true) ? 'checked' : ''; ?>>
+                            <span class="form-check-label"><?php echo htmlspecialchars($pc['name']); ?> <small class="text-secondary">@<?php echo htmlspecialchars($pc['username']); ?> · <?php echo htmlspecialchars($pc['role']); ?></small></span>
+                        </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="form-text">Hanya admin yang bisa mengubah PIC. Kosong = belum diassign.</div>
+                    <?php else: ?>
+                    <p class="text-secondary small mb-0">Tidak ada kandidat PIC aktif.</p>
+                    <?php endif; ?>
                 </div>
                 <div class="mb-3">
                     <label for="unit" class="form-label">Unit</label>

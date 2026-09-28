@@ -85,6 +85,114 @@ if (!function_exists('canDeleteCr')) {
     }
 }
 
+if (!function_exists('canManageCrPic')) {
+    /**
+     * Kelola PIC multi-person CR = admin only.
+     * Kandidat PIC: user aktif role admin/teknisi (divalidasi di setCrPics()).
+     * Melihat daftar PIC: semua yang boleh lihat CR (canViewCr).
+     */
+    function canManageCrPic($cr, $user)
+    {
+        return ($user['role'] ?? null) === 'admin';
+    }
+}
+
+if (!function_exists('getCrPics')) {
+    /**
+     * Ambil daftar PIC sebuah CR beserta info user, urut nama.
+     * Return array of ['id','name','username','role','assigned_by','created_at'].
+     */
+    function getCrPics($conn, $crId)
+    {
+        $pics = [];
+        $r = pg_query_params(
+            $conn,
+            "SELECT p.cr_id, p.user_id AS id, u.name, u.username, u.role, p.assigned_by, p.created_at"
+            . " FROM change_request_pics p JOIN users u ON u.id = p.user_id"
+            . " WHERE p.cr_id = $1 ORDER BY u.name ASC",
+            [(int)$crId]
+        );
+        if ($r) {
+            while ($row = pg_fetch_assoc($r)) $pics[] = $row;
+            pg_free_result($r);
+        }
+        return $pics;
+    }
+}
+
+if (!function_exists('getCrPicCandidates')) {
+    /**
+     * Kandidat PIC: user aktif role admin/teknisi, urut nama.
+     * Mirror dropdown report_for di create_cr.php (khusus staf).
+     */
+    function getCrPicCandidates($conn)
+    {
+        $out = [];
+        $r = pg_query($conn, "SELECT id, name, username, role FROM users WHERE is_active = TRUE AND role IN ('admin','teknisi') ORDER BY name ASC");
+        if ($r) {
+            while ($row = pg_fetch_assoc($r)) $out[] = $row;
+            pg_free_result($r);
+        }
+        return $out;
+    }
+}
+
+if (!function_exists('setCrPics')) {
+    /**
+     * Ganti seluruh daftar PIC sebuah CR + sinkron assigned_to + tulis history.
+     * Harus dipanggil di dalam transaksi milik pemanggil (BEGIN/COMMIT di luar).
+     * Validasi: array int, dedup, maks 10, tiap id aktif + role admin/teknisi.
+     * assigned_to disinkron = PIC dengan created_at tertua (PIC pertama),
+     * atau NULL bila daftar kosong — agar laporan/API lama tetap jalan.
+     * Return [true, null] sukses atau [false, 'pesan error'].
+     */
+    function setCrPics($conn, $crId, $userIds, $actorId)
+    {
+        if (!is_array($userIds)) $userIds = [$userIds];
+        $ids = [];
+        foreach ($userIds as $uid) {
+            $uid = (int)$uid;
+            if ($uid > 0 && !in_array($uid, $ids, true)) $ids[] = $uid;
+        }
+        if (count($ids) > 10) return [false, 'Maksimal 10 PIC per CR.'];
+        if (!empty($ids)) {
+            $place = [];
+            foreach ($ids as $i => $uid) $place[] = '$' . ($i + 1);
+            $chk = pg_query_params(
+                $conn,
+                "SELECT id FROM users WHERE id IN (" . implode(',', $place) . ") AND is_active = TRUE AND role IN ('admin','teknisi')",
+                $ids
+            );
+            if (!$chk) return [false, 'Gagal validasi kandidat PIC.'];
+            $valid = [];
+            while ($row = pg_fetch_assoc($chk)) $valid[] = (int)$row['id'];
+            pg_free_result($chk);
+            sort($valid);
+            $want = $ids;
+            sort($want);
+            if ($valid !== $want) return [false, 'Kandidat PIC tidak valid. Hanya user aktif role admin/teknisi.'];
+        }
+        $del = pg_query_params($conn, "DELETE FROM change_request_pics WHERE cr_id = $1", [(int)$crId]);
+        if (!$del) return [false, 'Gagal membersihkan PIC lama: ' . pg_last_error($conn)];
+        foreach ($ids as $uid) {
+            $ins = pg_query_params(
+                $conn,
+                "INSERT INTO change_request_pics (cr_id, user_id, assigned_by) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING",
+                [(int)$crId, $uid, (int)$actorId]
+            );
+            if (!$ins) return [false, 'Gagal menyimpan PIC: ' . pg_last_error($conn)];
+        }
+        // Sinkron assigned_to = PIC tertua agar kode lama (take/unassign/laporan/API) tetap valid.
+        $sync = pg_query_params(
+            $conn,
+            "UPDATE change_requests SET assigned_to = (SELECT user_id FROM change_request_pics WHERE cr_id = $1 ORDER BY created_at ASC, user_id ASC LIMIT 1), updated_at = NOW() WHERE id = $1",
+            [(int)$crId]
+        );
+        if (!$sync) return [false, 'Gagal sinkron assigned_to: ' . pg_last_error($conn)];
+        return [true, null];
+    }
+}
+
 if (!function_exists('handleCrUpload')) {
     /**
      * Upload lampiran CR ke uploads/change_requests/. Mirror handleTicketUpload().

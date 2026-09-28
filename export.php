@@ -34,9 +34,9 @@ if ($expType === 'cr') {
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $cFrom)) { $cparams[] = $cFrom; $cconds[] = 'cr.created_at::date >= $' . count($cparams); }
     if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $cTo)) { $cparams[] = $cTo; $cconds[] = 'cr.created_at::date <= $' . count($cparams); }
     $cwhere = implode(' AND ', $cconds);
-    $csql = "SELECT cr.cr_number, cr.aplikasi, cr.unit, cr.modul, cr.fitur, cr.priority, cr.status, u.name AS pelapor, a.name AS teknisi, cr.created_at, cr.waktu_dibutuhkan, cr.resolved_at, cr.sla_due_at, (SELECT COUNT(*) FROM change_request_items i WHERE i.cr_id = cr.id) AS item_count FROM change_requests cr LEFT JOIN users u ON u.id = cr.user_id LEFT JOIN users a ON a.id = cr.assigned_to WHERE $cwhere ORDER BY cr.created_at DESC LIMIT 5000";
+    $csql = "SELECT cr.cr_number, cr.aplikasi, cr.unit, cr.modul, cr.fitur, cr.priority, cr.status, u.name AS pelapor, a.name AS teknisi, (SELECT string_agg(u2.name, ', ' ORDER BY u2.name) FROM change_request_pics p JOIN users u2 ON u2.id = p.user_id WHERE p.cr_id = cr.id) AS pic_names, cr.created_at, cr.waktu_dibutuhkan, cr.resolved_at, cr.sla_due_at, (SELECT COUNT(*) FROM change_request_items i WHERE i.cr_id = cr.id) AS item_count FROM change_requests cr LEFT JOIN users u ON u.id = cr.user_id LEFT JOIN users a ON a.id = cr.assigned_to WHERE $cwhere ORDER BY cr.created_at DESC LIMIT 5000";
     $cres = pg_query_params($conn, $csql, $cparams);
-    $cheaders = ['CR_Number', 'Aplikasi', 'Unit', 'Modul', 'Fitur', 'Prioritas', 'Status', 'Pelapor', 'Teknisi', 'Dibuat', 'Waktu_Dibutuhkan', 'Selesai', 'SLA_Due', 'Status_SLA', 'Item_Count'];
+    $cheaders = ['CR_Number', 'Aplikasi', 'Unit', 'Modul', 'Fitur', 'Prioritas', 'Status', 'Pelapor', 'Teknisi', 'PICs', 'Dibuat', 'Waktu_Dibutuhkan', 'Selesai', 'SLA_Due', 'Status_SLA', 'Item_Count'];
     $crows = [];
     if ($cres) {
         while ($r = pg_fetch_assoc($cres)) {
@@ -45,7 +45,7 @@ if ($expType === 'cr') {
             } else {
                 $sla = (!empty($r['sla_due_at']) && strtotime($r['sla_due_at']) < time()) ? 'overdue' : 'berjalan';
             }
-            $crows[] = [$r['cr_number'], $r['aplikasi'], $r['unit'], $r['modul'], $r['fitur'], $r['priority'], $r['status'], $r['pelapor'], $r['teknisi'], $r['created_at'], $r['waktu_dibutuhkan'], $r['resolved_at'], $r['sla_due_at'], $sla, $r['item_count']];
+            $crows[] = [$r['cr_number'], $r['aplikasi'], $r['unit'], $r['modul'], $r['fitur'], $r['priority'], $r['status'], $r['pelapor'], $r['teknisi'], ($r['pic_names'] ?? '-'), $r['created_at'], $r['waktu_dibutuhkan'], $r['resolved_at'], $r['sla_due_at'], $sla, $r['item_count']];
         }
         pg_free_result($cres);
     }
@@ -69,14 +69,14 @@ if ($expType === 'cr') {
         $sh->setTitle('CR Detail');
         $sh->fromArray($cheaders, null, 'A1');
         $sh->fromArray($crows, null, 'A2');
-        $sh->getStyle('A1:O1')->getFont()->setBold(true);
+        $sh->getStyle('A1:P1')->getFont()->setBold(true);
         $sh->freezePane('A2');
-        $sh->setAutoFilter('A1:O' . max(1, count($crows) + 1));
-        foreach (range('A', 'O') as $col) $sh->getColumnDimension($col)->setAutoSize(true);
+        $sh->setAutoFilter('A1:P' . max(1, count($crows) + 1));
+        foreach (range('A', 'P') as $col) $sh->getColumnDimension($col)->setAutoSize(true);
         $st = ['open' => 0, 'in_progress' => 0, 'resolved' => 0, 'closed' => 0, 'tepat' => 0, 'telat' => 0, 'overdue' => 0];
         foreach ($crows as $row) {
             if (isset($st[$row[6]])) $st[$row[6]]++;
-            if (in_array($row[13], ['tepat', 'telat', 'overdue'], true)) $st[$row[13]]++;
+            if (in_array($row[14], ['tepat', 'telat', 'overdue'], true)) $st[$row[14]]++;
         }
         $rk = $ss->createSheet();
         $rk->setTitle('Rekap');
@@ -93,7 +93,7 @@ if ($expType === 'cr') {
         . '<h2>Laporan Change Request Helpdesk IT</h2><p>Diekspor ' . date('d M Y H:i') . ' &middot; ' . count($crows) . ' CR' . (count($crows) > 300 ? ' (300 pertama ditampilkan)' : '') . '</p>'
         . '<table><tr><th>CR</th><th>Aplikasi</th><th>Modul</th><th>Pri</th><th>Status</th><th>Pelapor</th><th>Dibuat</th><th>SLA</th></tr>';
     foreach ($pcr as $row) {
-        $chtml .= '<tr><td>' . htmlspecialchars($row[0]) . '</td><td>' . htmlspecialchars(mb_strimwidth($row[1], 0, 30, '…')) . '</td><td>' . htmlspecialchars(mb_strimwidth($row[3], 0, 30, '…')) . '</td><td>' . htmlspecialchars($row[5]) . '</td><td>' . htmlspecialchars($row[6]) . '</td><td>' . htmlspecialchars($row[7] ?? '-') . '</td><td>' . htmlspecialchars(substr($row[9], 0, 16)) . '</td><td>' . htmlspecialchars($row[13]) . '</td></tr>';
+        $chtml .= '<tr><td>' . htmlspecialchars($row[0]) . '</td><td>' . htmlspecialchars(mb_strimwidth($row[1], 0, 30, '…')) . '</td><td>' . htmlspecialchars(mb_strimwidth($row[3], 0, 30, '…')) . '</td><td>' . htmlspecialchars($row[5]) . '</td><td>' . htmlspecialchars($row[6]) . '</td><td>' . htmlspecialchars($row[7] ?? '-') . '</td><td>' . htmlspecialchars(substr($row[10], 0, 16)) . '</td><td>' . htmlspecialchars($row[14]) . '</td></tr>';
     }
     $chtml .= '</table></body></html>';
     $dompdf = new \Dompdf\Dompdf(['chroot' => __DIR__]);
