@@ -287,6 +287,106 @@
       });
     }
 
+    // ---- Tabel Todo SDLC (tasks.php view=list) ----
+    var $tasks = $('#grid-tasks');
+    if ($tasks.length) {
+      var tqs = new URLSearchParams(window.location.search);
+      var tfilters = {
+        search: tqs.get('search') || '',
+        phase: tqs.get('phase') || '',
+        priority: tqs.get('priority') || '',
+        owner: tqs.get('owner') || ''
+      };
+      var taskFallback = document.getElementById('tbl-tasks-fallback-wrap');
+      if (taskFallback) taskFallback.style.display = 'none';
+      $tasks.show();
+      var phaseCls = { backlog: 'text-bg-secondary', siap: 'text-bg-info', development: 'text-bg-primary', testing: 'text-bg-warning', deploy: 'text-bg-dark', done: 'text-bg-success' };
+      var taskDt = $tasks.DataTable({
+        serverSide: true,
+        processing: true,
+        pageLength: 15,
+        lengthMenu: [15, 30, 50],
+        language: langID,
+        responsive: true,
+        searching: false,
+        ajax: {
+          url: 'api/tasks.php',
+          data: function (d) {
+            d.search = tfilters.search;
+            d.phase = tfilters.phase;
+            d.priority = tfilters.priority;
+            d.owner = tfilters.owner;
+          },
+          error: function (xhr) {
+            if (xhr && (xhr.status === 401 || xhr.status === 403)) window.location.href = 'dashboard.php';
+          }
+        },
+        order: [[5, 'desc']],
+        columns: [
+          {
+            data: 'task_code', title: 'Kode',
+            render: function (data, type, row) {
+              if (type !== 'display') return data;
+              var h = '<strong>' + esc(row.task_code) + '</strong>';
+              if (row.ticket_number) h += ' <span class="badge text-bg-info" title="' + esc(row.ticket_number) + '">🎫</span>';
+              if (row.cr_number) h += ' <span class="badge text-bg-warning" title="' + esc(row.cr_number) + '">🔄</span>';
+              if (row.is_overdue) h += ' <span class="badge text-bg-danger">overdue</span>';
+              return h;
+            }
+          },
+          {
+            data: 'title', title: 'Judul',
+            render: function (data, type, row) {
+              if (type !== 'display') return data;
+              return esc(String(row.title || '').substring(0, 60));
+            }
+          },
+          { data: 'owner_name', title: 'Owner', render: function (d, t) { return t !== 'display' ? d : esc(d || '—'); } },
+          {
+            data: 'phase', title: 'Fase',
+            render: function (data, type, row) {
+              if (type !== 'display') return data;
+              return '<span class="badge ' + (phaseCls[row.phase] || 'text-bg-secondary') + '">' + esc(row.phase) + '</span>';
+            }
+          },
+          {
+            data: 'priority', title: 'Prioritas',
+            render: function (data, type, row) {
+              if (type !== 'display') return data;
+              return '<span class="priority-badge priority-' + esc(String(row.priority).toLowerCase()) + '">' + esc(row.priority) + '</span>';
+            }
+          },
+          {
+            data: 'due_date', title: 'Due',
+            render: function (d, t, row) {
+              if (t !== 'display') return d;
+              if (!row.due_date) return '<span class="text-secondary">-</span>';
+              return '<span class="small' + (row.is_overdue ? ' text-danger fw-bold' : '') + '">' + esc(String(row.due_date).substring(0, 10)) + '</span>';
+            }
+          },
+          {
+            data: null, title: 'Aksi', orderable: false, searchable: false,
+            render: function (data, type, row) {
+              if (type !== 'display') return '';
+              return '<a class="btn btn-sm btn-primary" href="view_task.php?id=' + encodeURIComponent(row.id) + '">Detail</a>';
+            }
+          }
+        ]
+      });
+      var taskForm = document.querySelector('form[data-task-filter]');
+      if (taskForm) {
+        taskForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var fd = new FormData(taskForm);
+          tfilters.search = (fd.get('search') || '').toString();
+          tfilters.phase = (fd.get('phase') || '').toString();
+          tfilters.priority = (fd.get('priority') || '').toString();
+          tfilters.owner = (fd.get('owner') || '').toString();
+          taskDt.ajax.reload();
+        });
+      }
+    }
+
     // ---- Tabel users (user_management.php) ----
     var $users = $('#grid-users');
     if ($users.length) {
@@ -364,8 +464,20 @@
     ]);
     simpleTable('#grid-workload', 'api/dashboard.php?type=workload', [
       { data: 'name', title: 'Teknisi' },
-      { data: 'active', title: 'Aktif' },
-      { data: 'done', title: 'Selesai bln ini' }
+      {
+        data: 'active', title: 'Aktif (tiket+todo)',
+        render: function (d, t, row) {
+          if (t !== 'display') return d;
+          return '<strong>' + esc(d) + '</strong> <small class="text-secondary">🎫' + esc(row.ticket_active || 0) + ' + 📋' + esc(row.todo_active || 0) + '</small>';
+        }
+      },
+      {
+        data: 'done', title: 'Selesai bln ini',
+        render: function (d, t, row) {
+          if (t !== 'display') return d;
+          return '<strong>' + esc(d) + '</strong> <small class="text-secondary">🎫' + esc(row.ticket_done || 0) + ' + 📋' + esc(row.todo_done || 0) + '</small>';
+        }
+      }
     ]);
   });
 })();

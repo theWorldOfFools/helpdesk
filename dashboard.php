@@ -116,6 +116,22 @@ $openCr = $countCr('open');
 $progCr = $countCr('in_progress');
 $resCr = $countCr('resolved');
 $closedCr = $countCr('closed');
+
+// ---- Mini-todo SDLC: ringkasan untuk workload dashboard (staf saja) ----
+$todoSummary = ['active' => 0, 'done_month' => 0, 'overdue' => 0, 'mine' => 0, 'mine_overdue' => 0];
+if (!$isPelapor) {
+    $todoSummary['active'] = (int)pg_fetch_result(pg_query($conn, "SELECT COUNT(*) FROM dev_tasks WHERE phase <> 'done'"), 0, 0);
+    $todoSummary['done_month'] = (int)pg_fetch_result(pg_query($conn, "SELECT COUNT(*) FROM dev_tasks WHERE phase = 'done' AND date_trunc('month', done_at) = date_trunc('month', NOW())"), 0, 0);
+    $todoSummary['overdue'] = (int)pg_fetch_result(pg_query($conn, "SELECT COUNT(*) FROM dev_tasks WHERE phase <> 'done' AND due_date IS NOT NULL AND due_date < CURRENT_DATE"), 0, 0);
+    if ($role === 'teknisi') {
+        $mr = pg_query_params($conn, "SELECT COUNT(*) FROM dev_tasks WHERE owner_id = $1 AND phase <> 'done'", [$user['id']]);
+        $todoSummary['mine'] = $mr ? (int)pg_fetch_result($mr, 0, 0) : 0;
+        if ($mr) pg_free_result($mr);
+        $mo = pg_query_params($conn, "SELECT COUNT(*) FROM dev_tasks WHERE owner_id = $1 AND phase <> 'done' AND due_date IS NOT NULL AND due_date < CURRENT_DATE", [$user['id']]);
+        $todoSummary['mine_overdue'] = $mo ? (int)pg_fetch_result($mo, 0, 0) : 0;
+        if ($mo) pg_free_result($mo);
+    }
+}
 $recentCr = [];
 $rr2 = pg_query_params($conn, "SELECT cr.*, u.name AS reporter_name FROM change_requests cr LEFT JOIN users u ON cr.user_id = u.id WHERE ($crScopeWhere) ORDER BY cr.created_at DESC LIMIT 5", $crScopeParams);
 if ($rr2) {
@@ -225,8 +241,18 @@ if ($rr2) {
         </div></div></div>
     </div>
 
+    <div class="card mb-4 border-primary"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+            <h3 class="h6 mb-0">📋 Todo SDLC <small class="text-secondary">(internal — <?php echo $todoSummary['active']; ?> aktif · <?php echo $todoSummary['done_month']; ?> done bln ini<?php if ($todoSummary['overdue'] > 0) echo ' · <span class="text-danger fw-bold">' . $todoSummary['overdue'] . ' overdue</span>'; ?>)</small></h3>
+            <span class="d-flex gap-2">
+                <a href="tasks.php" class="btn btn-sm btn-primary">Board Todo</a>
+                <a href="create_task.php" class="btn btn-sm btn-outline-primary">+ Buat Todo</a>
+            </span>
+        </div>
+    </div></div>
+
     <div class="card mb-4"><div class="card-body">
-        <h3 class="h6">Workload Teknisi Aktif (DataTables)</h3>
+        <h3 class="h6">Workload Teknisi Aktif — tiket + todo (DataTables)</h3>
         <div class="table-responsive"><table id="grid-workload" class="table table-hover align-middle mb-0" style="width:100%;">
             <thead class="table-dark"><tr><th>Teknisi</th><th>Aktif</th><th>Selesai bln ini</th></tr></thead>
             <tbody></tbody>
@@ -289,6 +315,13 @@ if ($rr2) {
         <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="mb-2"><span class="stat-icon">✅</span></div><div class="fs-2 fw-bold text-success"><?php echo $resolved; ?></div><div class="text-secondary small">Resolved</div><div class="text-secondary small"><?php echo $closed; ?> closed</div></div></div></div>
         <div class="col-6 col-xl-3"><div class="card h-100"><div class="card-body"><div class="mb-2"><span class="stat-icon">📊</span></div><div class="fs-2 fw-bold"><?php echo $totalTickets; ?></div><div class="text-secondary small">Total Tiket Sistem</div><div class="progress mt-2" style="height:8px;"><div class="progress-bar" style="width:<?php echo $totalTickets ? round(($resolved + $closed) / $totalTickets * 100) : 0; ?>%"></div></div></div></div></div>
     </div>
+
+    <div class="card mb-4 border-primary"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+            <h3 class="h6 mb-0">📋 Todo Saya <small class="text-secondary">(<?php echo $todoSummary['mine']; ?> aktif<?php if ($todoSummary['mine_overdue'] > 0) echo ' · <span class="text-danger fw-bold">' . $todoSummary['mine_overdue'] . ' overdue</span>'; ?> — masuk hitungan workload)</small></h3>
+            <span class="d-flex gap-2"><a href="tasks.php?owner=mine" class="btn btn-sm btn-primary">Todo Saya</a><a href="create_task.php" class="btn btn-sm btn-outline-primary">+ Buat Todo</a></span>
+        </div>
+    </div></div>
 
     <div class="card mb-4 border-info"><div class="card-body">
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">

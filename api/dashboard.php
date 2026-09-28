@@ -77,17 +77,27 @@ switch ($type) {
         jsonResponse(['data' => array_values($pivot)]);
     }
     case 'workload': {
-        // Beban teknisi aktif + resolved bulan ini (admin & teknisi boleh)
+        // Beban teknisi aktif + selesai bulan ini (admin & teknisi boleh).
+        // GABUNG: tiket (assigned_to, open/in_progress) + todo SDLC (owner, fase belum done).
         if (!in_array($role, ['admin', 'teknisi'], true)) jsonResponse(['error' => 'Forbidden'], 403);
         $r = pg_query($conn, "SELECT u.id, u.name,
-                COUNT(*) FILTER (WHERE t.status IN ('open','in_progress')) AS active,
-                COUNT(*) FILTER (WHERE t.status IN ('resolved','closed') AND date_trunc('month', COALESCE(t.resolved_at, t.updated_at)) = date_trunc('month', ('$month-01')::date)) AS done_month
+                COUNT(*) FILTER (WHERE t.status IN ('open','in_progress')) AS ticket_active,
+                (SELECT COUNT(*) FROM dev_tasks d WHERE d.owner_id = u.id AND d.phase <> 'done') AS todo_active,
+                COUNT(*) FILTER (WHERE t.status IN ('resolved','closed') AND date_trunc('month', COALESCE(t.resolved_at, t.updated_at)) = date_trunc('month', ('$month-01')::date)) AS ticket_done,
+                (SELECT COUNT(*) FROM dev_tasks d WHERE d.owner_id = u.id AND d.phase = 'done' AND date_trunc('month', d.done_at) = date_trunc('month', ('$month-01')::date)) AS todo_done
                 FROM users u LEFT JOIN tickets t ON t.assigned_to = u.id
                 WHERE u.role = 'teknisi' AND u.is_active = TRUE
-                GROUP BY u.id, u.name ORDER BY active DESC, done_month DESC");
+                GROUP BY u.id, u.name ORDER BY 3 DESC, 5 DESC");
         $out = [];
         if ($r) {
-            while ($row = pg_fetch_assoc($r)) $out[] = ['id' => (int)$row['id'], 'name' => $row['name'], 'active' => (int)$row['active'], 'done' => (int)$row['done_month']];
+            while ($row = pg_fetch_assoc($r)) {
+                $ta = (int)$row['ticket_active'];
+                $oa = (int)$row['todo_active'];
+                $td = (int)$row['ticket_done'];
+                $od = (int)$row['todo_done'];
+                $out[] = ['id' => (int)$row['id'], 'name' => $row['name'], 'active' => $ta + $oa, 'done' => $td + $od,
+                    'ticket_active' => $ta, 'todo_active' => $oa, 'ticket_done' => $td, 'todo_done' => $od];
+            }
             pg_free_result($r);
         }
         pg_close($conn);

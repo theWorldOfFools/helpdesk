@@ -101,6 +101,13 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="create_cr.php" class="nav-link side-link<?php echo side_link_active('create_cr.php', $activePage); ?>">
                         <i class="bi bi-plus-square"></i> Buat CR
                     </a>
+                    <p class="side-label">Dev Internal</p>
+                    <a href="tasks.php" class="nav-link side-link<?php echo side_link_active(['tasks.php','view_task.php','edit_task.php'], $activePage); ?>">
+                        <i class="bi bi-kanban"></i> Board Todo
+                    </a>
+                    <a href="create_task.php" class="nav-link side-link<?php echo side_link_active('create_task.php', $activePage); ?>">
+                        <i class="bi bi-plus-square"></i> Buat Todo
+                    </a>
                     <a href="oncall.php" class="nav-link side-link<?php echo side_link_active('oncall.php', $activePage); ?>">
                         <i class="bi bi-calendar-check"></i> Jadwal Oncall
                     </a>
@@ -137,6 +144,13 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     </a>
                     <a href="create_cr.php" class="nav-link side-link<?php echo side_link_active('create_cr.php', $activePage); ?>">
                         <i class="bi bi-plus-square"></i> Buat CR
+                    </a>
+                    <p class="side-label">Dev Internal</p>
+                    <a href="tasks.php" class="nav-link side-link<?php echo side_link_active(['tasks.php','view_task.php','edit_task.php'], $activePage); ?>">
+                        <i class="bi bi-kanban"></i> Board Todo
+                    </a>
+                    <a href="create_task.php" class="nav-link side-link<?php echo side_link_active('create_task.php', $activePage); ?>">
+                        <i class="bi bi-plus-square"></i> Buat Todo
                     </a>
                     <a href="oncall.php" class="nav-link side-link<?php echo side_link_active('oncall.php', $activePage); ?>">
                         <i class="bi bi-calendar-check"></i> Jadwal Oncall
