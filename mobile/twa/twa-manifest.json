@@ -1,0 +1,22 @@
+{
+  "host": "ganti-dengan-domain-kamu.example",
+  "startUrl": "/login.php",
+  "name": "Helpdesk IT — Sistem Tiket Operasional",
+  "shortName": "Helpdesk IT",
+  "themeColor": "#1a1a2e",
+  "backgroundColor": "#1a1a2e",
+  "display": "standalone",
+  "orientation": "portrait",
+  "iconUrl": "https://ganti-dengan-domain-kamu.example/assets/icons/icon-512.png",
+  "packageId": "id.rs.helpdesk",
+  "launcherName": "Helpdesk IT",
+  "signingKey": {
+    "alias": "helpdesk",
+    "path": "./android.keystore",
+    "passwords": "JANGAN isi di sini — pakai env/prompt saat build"
+  },
+  "shortcuts": [
+    { "name": "Buat Tiket", "url": "/create_ticket.php" },
+    { "name": "Jadwal Oncall", "url": "/oncall.php" }
+  ]
+}

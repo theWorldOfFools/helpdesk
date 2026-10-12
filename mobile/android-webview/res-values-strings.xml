@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SATU tempat ganti domain. Contoh produksi: https://helpdesk.rs-kamu.id/ -->
+<resources>
+    <string name="app_url">https://ganti-dengan-domain-kamu.example/</string>
+</resources>

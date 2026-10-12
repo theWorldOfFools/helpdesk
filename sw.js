@@ -1,6 +1,6 @@
 /* Service worker minimal: cache-first khusus aset statis same-origin.
    Halaman dinamis (PHP) TIDAK di-cache agar data sesi tidak basibasi/bocor. */
-const CACHE = 'helpdesk-v1';
+const CACHE = 'helpdesk-v2';
 const PRECACHE = [
   './assets/css/style.css',
   './assets/js/script.js',
