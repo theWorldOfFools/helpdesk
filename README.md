@@ -9,6 +9,7 @@ Sistem tiket online untuk mencatat dan memantau operasional divisi IT dengan sis
 - Kategorisasi tiket (Jaringan, Hardware, Software, Lainnya)
 - Prioritas tiket (Low, Medium, High, Critical)
 - Dashboard monitoring real-time
+- Drive & Dokumen internal (folder hierarkis + sharing privat/divisi/publik, ala Google Drive)
 - Sistem RBAC dengan 3 role: Administrator, Teknisi, Pelapor
 - Autentikasi login dengan session management
 - Filter dan pencarian tiket
@@ -27,6 +28,9 @@ Sistem tiket online untuk mencatat dan memantau operasional divisi IT dengan sis
 | Tindak Lanjut CR | ✅ | ✅ | 💬 (Komentar own only) |
 | Dashboard Penuh | ✅ | ✅ | ✅ (Own only) |
 | Kelola User | ✅ | ❌ | ❌ |
+| Drive: Buat Folder/File | ✅ | ✅ | ✅ (Private/divisi own) |
+| Drive: Folder Publik (SOP) | ✅ | ✅ | ❌ (Lihat saja) |
+| Drive: Share ke User | ✅ | ✅ (view; edit perlu owner) | ✅ (folder own) |
 
 ## Arsitektur
 
@@ -110,10 +114,16 @@ psql -U postgres -d helpdesk_db -f migrations/011_change_requests.sql
 psql -U postgres -d helpdesk_db -f migrations/012_change_request_comments.sql
 psql -U postgres -d helpdesk_db -f migrations/013_simrs_auth.sql
 psql -U postgres -d helpdesk_db -f migrations/014_divisions.sql
+psql -U postgres -d helpdesk_db -f migrations/015_oncall_schedules.sql
+psql -U postgres -d helpdesk_db -f migrations/016_change_request_pics.sql
+psql -U postgres -d helpdesk_db -f migrations/017_dev_tasks.sql
+psql -U postgres -d helpdesk_db -f migrations/018_dev_task_assignees.sql
+psql -U postgres -d helpdesk_db -f migrations/019_dev_task_attachments.sql
+psql -U postgres -d helpdesk_db -f migrations/020_drive.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→015 dari schema kosong.
-> `011`, `012`, `013`, `014` idempoten (`IF NOT EXISTS`) sehingga aman
+> Catatan: migrasi wajib dijalankan berurutan 001→020 dari schema kosong.
+> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
 > `uploads/change_requests/` writable.
@@ -182,6 +192,9 @@ helpdesk/
 ├── profile.php             # Profil + ganti password (semua role)
 ├── kb.php                  # Basis solusi (semua role)
 ├── kb_manage.php           # Kelola artikel + template jawaban (admin/teknisi)
+├── drive.php               # Drive & Dokumen: browser folder + upload + share (semua role)
+├── drive_action.php        # Backend Drive: CRUD folder/file + share (POST+CSRF)
+├── drive_download.php      # Download/preview file Drive dengan cek hak akses
 ├── notifications.php         # Pusat notifikasi in-app (semua role)
 ├── manifest.json + sw.js     # PWA dasar (instalable, cache aset statis)
 ├── api/
@@ -208,9 +221,15 @@ helpdesk/
 │   ├── 012_change_request_comments.sql # change_request_comments (diskusi CR)
 │   ├── 013_simrs_auth.sql       # auth_source/external_id/jabatan/unit_kerja (login SIMRS)
 │   └── 014_divisions.sql        # master divisi + seed dari daftar lama & data existing
-│   └── 015_oncall_schedules.sql # jadwal oncall: tanggal + user (Minggu/libur boleh 2 orang)
+│   ├── 015_oncall_schedules.sql # jadwal oncall: tanggal + user (Minggu/libur boleh 2 orang)
+│   ├── 016_change_request_pics.sql # multi-PIC CR (many-to-many, sinkron assigned_to)
+│   ├── 017_dev_tasks.sql        # mini-todo SDLC internal + comments + history
+│   ├── 018_dev_task_assignees.sql # assignee multi-person todo
+│   ├── 019_dev_task_attachments.sql # multi-lampiran todo (10 file, 20MB)
+│   └── 020_drive.sql            # drive_folders + drive_files + drive_shares (IDEMPOTEN)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
+│   ├── drive_auth.php      # Helper Drive: canView/canEdit warisan + kuota + multi-upload
 │   ├── simrs_auth.php      # Helper SIMRS: koneksi read-only, verify HMAC+bcrypt, profil pegawai
 │   ├── cr_auth.php         # Helper CR: generateCrNumber/canViewCr/canActOnCr/upload
 │   ├── csrf.php            # CSRF token/verify
@@ -263,6 +282,7 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - Dashboard Chart.js per-role + leaderboard teknisi (skor cepat+banyak) & pelapor (bulanan)
 - Change Request end-to-end (terpisah dari tiket): buat + tabel dinamis Jenis Perubahan (Penambahan/Perubahan/Design, 1–20 baris), daftar + API server-side, detail + tindak lanjut + diskusi/riwayat, edit/hapus admin, nomor CR-YYYYMM-XXXX anti-race, SLA jam kerja, notifikasi, widget dashboard + laporan + export
 - Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, profil/password ikut SIMRS
+- Drive & Dokumen internal (`drive.php` + `drive_action.php` + `drive_download.php`, migrasi `020_drive.sql`): folder hierarkis maks 5 level + subfolder, upload multi-file (10 file/request, 50MB/file, 500MB/user), preview gambar/PDF, pencarian global, sharing privat/divisi/publik + share per-user (view/edit, menurun ke subfolder), download aman via cek hak, notifikasi saat di-share, audit `activity_log`
 - Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
 
 ### Menambah Pengguna Baru

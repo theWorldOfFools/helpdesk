@@ -117,6 +117,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="kb.php" class="nav-link side-link<?php echo side_link_active(['kb.php', 'kb_manage.php'], $activePage); ?>">
                         <i class="bi bi-journal-text"></i> Basis Solusi
                     </a>
+                    <a href="drive.php" class="nav-link side-link<?php echo side_link_active(['drive.php'], $activePage); ?>">
+                        <i class="bi bi-hdd"></i> Drive & Dokumen
+                    </a>
                     <p class="side-label">Mastering</p>
                     <a href="user_management.php" class="nav-link side-link<?php echo side_link_active('user_management.php', $activePage); ?>">
                         <i class="bi bi-people"></i> Kelola Pengguna
@@ -161,6 +164,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="kb.php" class="nav-link side-link<?php echo side_link_active('kb.php', $activePage); ?>">
                         <i class="bi bi-journal-text"></i> Basis Solusi
                     </a>
+                    <a href="drive.php" class="nav-link side-link<?php echo side_link_active(['drive.php'], $activePage); ?>">
+                        <i class="bi bi-hdd"></i> Drive & Dokumen
+                    </a>
 
                 <?php else: /* pelapor */ ?>
                     <a href="dashboard.php" class="nav-link side-link<?php echo side_link_active('dashboard.php', $activePage); ?>">
@@ -186,6 +192,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     </a>
                     <a href="kb.php" class="nav-link side-link<?php echo side_link_active('kb.php', $activePage); ?>">
                         <i class="bi bi-journal-text"></i> Basis Solusi
+                    </a>
+                    <a href="drive.php" class="nav-link side-link<?php echo side_link_active(['drive.php'], $activePage); ?>">
+                        <i class="bi bi-hdd"></i> Drive & Dokumen
                     </a>
                 <?php endif; ?>
 
