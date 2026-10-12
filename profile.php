@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/includes/telegram.php';
 requireLogin();
 
 $user = getCurrentUser();
@@ -18,7 +19,21 @@ $isSimrsUser = (($user['auth_source'] ?? 'local') === 'simrs');
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrf();
     $act = $_POST['act'] ?? '';
-    if ($isSimrsUser) {
+    if ($act === 'tg_gen') {
+        // Generate kode OTP 6 digit, hash di DB, expired 10 menit, single-use.
+        $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        @pg_query_params($conn, "UPDATE telegram_link_codes SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL", [$user['id']]);
+        @pg_query_params($conn, "INSERT INTO telegram_link_codes (user_id, code_hash, expires_at) VALUES ($1,$2,NOW() + INTERVAL '10 minutes')", [$user['id'], hash('sha256', $code)]);
+        logActivity($conn, $user['id'], 'telegram_code', 'Generate kode link Telegram');
+        $_SESSION['tg_code_plain'] = $code;
+        header('Location: profile.php#tg');
+        exit;
+    } elseif ($act === 'tg_unlink') {
+        @pg_query_params($conn, "DELETE FROM telegram_identities WHERE user_id = $1", [$user['id']]);
+        logActivity($conn, $user['id'], 'telegram_unlink', 'Putus via profil');
+        $message = 'Tautan Telegram diputus.';
+        $messageType = 'success';
+    } elseif ($isSimrsUser) {
         $message = 'Akun SIMRS: nama, divisi, dan password mengikuti data SIMRS dan tidak bisa diubah di sini.';
         $messageType = 'info';
     } elseif ($act === 'info') {
@@ -81,6 +96,18 @@ if ($lr) {
     while ($row = pg_fetch_assoc($lr)) $logs[] = $row;
     pg_free_result($lr);
 }
+
+// Status tautan Telegram + kode plain sekali tampil
+$tgLink = null;
+try {
+    $r = @pg_query_params($conn, "SELECT telegram_id, telegram_username, linked_via, linked_at FROM telegram_identities WHERE user_id = $1", [$user['id']]);
+    if ($r && pg_num_rows($r) > 0) $tgLink = pg_fetch_assoc($r);
+    if ($r) pg_free_result($r);
+} catch (Throwable $e) {
+}
+$tgCode = $_SESSION['tg_code_plain'] ?? null;
+unset($_SESSION['tg_code_plain']);
+$tgBot = tgConfig()['username'] ?? '';
 ?>
 
 <h1 class="h4 mb-3">Profil Saya</h1>
@@ -118,6 +145,23 @@ if ($lr) {
         <?php endif; ?>
     </div></div></div>
 </div>
+
+<div class="card mt-3" id="tg"><div class="card-body">
+    <h3 class="h6">🤖 Hubungkan Telegram</h3>
+    <?php if ($tgLink): ?>
+        <div class="alert alert-success small mb-2">Terhubung: telegram_id <code><?php echo e($tgLink['telegram_id']); ?></code><?php echo $tgLink['telegram_username'] ? ' (@' . e($tgLink['telegram_username']) . ')' : ''; ?> · via <?php echo e($tgLink['linked_via']); ?> · <?php echo e($tgLink['linked_at']); ?></div>
+        <form method="POST" class="d-inline"><?php echo csrf_field(); ?><input type="hidden" name="act" value="tg_unlink"><button class="btn btn-sm btn-outline-danger" type="submit">Putus tautan</button></form>
+        <span class="small text-secondary ms-2">Cek via bot: <code>/siapa</code></span>
+    <?php else: ?>
+        <p class="small text-secondary mb-2">Generate kode 6 digit, lalu kirim <code>/hubung KODE</code> ke bot (lebih aman via DM). Berlaku 10 menit, sekali pakai.</p>
+        <?php if ($tgCode): ?>
+            <div class="alert alert-warning">Kode kamu: <strong style="font-size:1.4em;letter-spacing:3px;"><?php echo e($tgCode); ?></strong>
+            <?php if ($tgBot): ?><br>Klik: <a href="https://t.me/<?php echo e($tgBot); ?>?start=<?php echo e($tgCode); ?>" target="_blank" rel="noopener">t.me/<?php echo e($tgBot); ?>?start=<?php echo e($tgCode); ?></a><?php endif; ?>
+            <br><span class="small">Atau kirim manual: <code>/hubung <?php echo e($tgCode); ?></code></span></div>
+        <?php endif; ?>
+        <form method="POST"><?php echo csrf_field(); ?><input type="hidden" name="act" value="tg_gen"><button class="btn btn-sm btn-primary" type="submit">Generate kode baru</button></form>
+    <?php endif; ?>
+</div></div>
 
 <div class="card mt-3"><div class="card-body">
     <h3 class="h6">Aktivitas Terakhir Saya</h3>

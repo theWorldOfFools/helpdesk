@@ -3,6 +3,7 @@
 // Mirror ticket_action.php untuk tabel change_requests/* (file tiket tidak diubah).
 require_once 'config.php';
 require_once 'includes/cr_auth.php';
+require_once __DIR__ . '/includes/telegram.php';
 requireLogin();
 requirePost();
 requireCsrf();
@@ -210,6 +211,9 @@ try {
     if (!empty($newAssigned) && (int)$newAssigned !== (int)$user['id'] && (int)$newAssigned !== (int)$cr['user_id']) {
         notifyUser($conn, $newAssigned, 'CR ' . $cr['cr_number'] . ' diassign ke Anda', $user['name'] . ': ' . $plain, $link);
     }
+    $tgText = ($action === 'comment' ? '💬 <b>' . e($cr['cr_number']) . '</b> komentar baru' : '📋 <b>' . e($cr['cr_number']) . '</b>: ' . e($from) . ' → <b>' . e($to ?? $from) . '</b>')
+        . "\n" . e($cr['title']) . "\n👤 " . e($user['name']) . ': ' . e($plain) . "\n" . tgAssigneeLine($conn, $newAssigned);
+    tgNotifyEvent($tgText);
     $_SESSION['flash_ok'] = $action === 'comment' ? 'Komentar ditambahkan.' : ('Status: ' . $from . ' → ' . ($to ?? $from) . ' tersimpan.');
 } catch (Exception $ex) {
     pg_query($conn, 'ROLLBACK');

@@ -127,6 +127,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                     <a href="divisi.php" class="nav-link side-link<?php echo side_link_active(['divisi.php'], $activePage); ?>">
                         <i class="bi bi-building"></i> Data Divisi
                     </a>
+                    <a href="telegram_admin.php" class="nav-link side-link<?php echo side_link_active(['telegram_admin.php'], $activePage); ?>">
+                        <i class="bi bi-telegram"></i> Telegram Bot
+                    </a>
 
                 <?php elseif ($currentRole === 'teknisi'): ?>
                     <a href="dashboard.php" class="nav-link side-link<?php echo side_link_active('dashboard.php', $activePage); ?>">

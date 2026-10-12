@@ -1,6 +1,7 @@
 <?php
 require_once 'config.php';
 require_once 'includes/cr_auth.php';
+require_once __DIR__ . '/includes/telegram.php';
 requireLogin();
 
 $user = getCurrentUser();
@@ -220,10 +221,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         pg_free_result($sr);
                     }
+                    $tgCrTitle = $old['aplikasi'] . ' — ' . $old['fitur'];
+                    $tgCrPrio = $old['priority'];
+                    $tgBy = $user['name'];
                     $message = 'Change Request ' . $crNumber . ' berhasil dibuat!' . ($upPath ? ' Lampiran ikut tersimpan.' : '');
                     $messageType = 'success';
                     $old = ['aplikasi' => '', 'unit' => '', 'modul' => '', 'fitur' => '', 'url' => '', 'waktu' => '', 'keterangan' => '', 'priority' => 'medium', 'report_for' => $user['id']];
                     $oldItems = [['jenis' => '', 'uraian' => '', 'alasan' => '']];
+                    tgNotifyEvent("🆕 <b>CR baru " . e($crNumber) . "</b> (" . e($tgCrPrio) . ")\n" . e($tgCrTitle) . "\n👤 " . e($tgBy));
                 } else {
                     pg_query($conn, 'ROLLBACK');
                     if ($upPath && file_exists(__DIR__ . '/' . $upPath)) @unlink(__DIR__ . '/' . $upPath);

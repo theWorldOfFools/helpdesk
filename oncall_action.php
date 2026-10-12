@@ -2,6 +2,7 @@
 // Backend Jadwal Oncall (admin only). Semua aksi via POST + CSRF.
 // Aksi: add, update, delete, save_import, rotasi. Sukses/gagal via flash + redirect ke oncall.php.
 require_once 'config.php';
+require_once __DIR__ . '/includes/telegram.php';
 requireLogin();
 requirePost();
 requireCsrf();
@@ -79,6 +80,11 @@ if ($action === 'add') {
     if ($ins) {
         pg_free_result($ins);
         logActivity($conn, $user['id'], 'oncall_add', "Tambah oncall $tgl user_id=$uid ($peran)");
+        try {
+            $nm = pg_fetch_result(pg_query_params($conn, "SELECT name FROM users WHERE id = $1", [$uid]), 0, 0) ?: ('#' . $uid);
+            tgNotifyEvent("📞 <b>Oncall " . e($tgl) . "</b>\n" . tgAssigneeLine($conn, $uid) . " ($peran)");
+        } catch (Throwable $e) {
+        }
         pg_close($conn);
         oncallRedirect("Jadwal $tgl berhasil ditambahkan ($peran).");
     }

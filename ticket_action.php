@@ -2,6 +2,7 @@
 // Aksi Tindak Lanjut tiket — POST only + CSRF + wajib catatan.
 // Pisahan dari edit_ticket.php (yang kini admin-only).
 require_once 'config.php';
+require_once __DIR__ . '/includes/telegram.php';
 requireLogin();
 requirePost();
 requireCsrf();
@@ -141,6 +142,10 @@ try {
     if (!empty($newAssigned) && (int)$newAssigned !== (int)$user['id'] && (int)$newAssigned !== (int)$ticket['user_id']) {
         notifyUser($conn, $newAssigned, 'Tiket ' . $ticket['ticket_number'] . ' diassign ke Anda', $user['name'] . ': ' . $plain, $link);
     }
+    // Telegram group: status/comment + mention assignee bila sudah link.
+    $tgText = ($action === 'comment' ? '💬 <b>' . e($ticket['ticket_number']) . '</b> komentar baru' : '🎫 <b>' . e($ticket['ticket_number']) . '</b>: ' . e($from) . ' → <b>' . e($to ?? $from) . '</b>')
+        . "\n" . e($ticket['title']) . "\n👤 " . e($user['name']) . ': ' . e($plain) . "\n" . tgAssigneeLine($conn, $newAssigned);
+    tgNotifyEvent($tgText);
     $_SESSION['flash_ok'] = $action === 'comment' ? 'Komentar ditambahkan.' : ('Status: ' . $from . ' → ' . ($to ?? $from) . ' tersimpan.');
 } catch (Exception $ex) {
     pg_query($conn, 'ROLLBACK');

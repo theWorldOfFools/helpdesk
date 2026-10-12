@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once __DIR__ . '/includes/telegram.php';
 requireLogin();
 
 $user = getCurrentUser();
@@ -77,9 +78,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     pg_free_result($sr);
                 }
+                $newTitle = $old['title'];
+                $newPrio = $old['priority'];
+                $newDiv = $old['division'];
+                $byName = $user['name'];
                 $message = 'Tiket ' . $ticketNumber . ' berhasil dibuat!' . ($upPath ? ' Lampiran ikut tersimpan.' : '');
                 $messageType = 'success';
                 $old = ['title' => '', 'description' => '', 'category' => '', 'priority' => '', 'division' => '', 'report_for' => $user['id']];
+                tgNotifyEvent("🆕 <b>Tiket baru " . e($ticketNumber) . "</b> (" . e($newPrio) . ")\n" . e($newTitle) . "\n📍 " . e($newDiv) . " · 👤 " . e($byName));
             } else {
                 pg_query($conn, 'ROLLBACK');
                 if ($upPath && file_exists(__DIR__ . '/' . $upPath)) @unlink(__DIR__ . '/' . $upPath);
