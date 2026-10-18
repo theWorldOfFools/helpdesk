@@ -123,7 +123,9 @@ if (!function_exists('isDriveDescendant')) {
 }
 
 if (!function_exists('getDriveShareForUser')) {
-    // Share langsung ATAU warisan dari ancestor (hak tertinggi menang: edit > view).
+    // Share langsung ATAU warisan dari ancestor. Hak paling spesifik menang:
+    // share pada folder itu sendiri mengalahkan share pada ancestor, sehingga
+    // 'view' langsung bisa membatasi 'edit' yang diwarisi dari folder induk.
     function getDriveShareForUser($conn, $folder, $userId)
     {
         $userId = (int)$userId;
@@ -135,7 +137,8 @@ if (!function_exists('getDriveShareForUser')) {
         foreach ($ids as $i => $v) $place[] = '$' . ($i + 2);
         $r = pg_query_params(
             $conn,
-            "SELECT * FROM drive_shares WHERE folder_id IN (" . implode(',', $place) . ") AND shared_with_user_id = $1 ORDER BY CASE permission WHEN 'edit' THEN 0 ELSE 1 END LIMIT 1",
+            "SELECT * FROM drive_shares WHERE folder_id IN (" . implode(',', $place) . ") AND shared_with_user_id = $1"
+            . " ORDER BY array_position(ARRAY[" . implode(',', $place) . "]::int[], folder_id) DESC LIMIT 1",
             array_merge([$userId], $ids)
         );
         if (!$r || pg_num_rows($r) === 0) {
@@ -169,17 +172,20 @@ if (!function_exists('canViewDrive')) {
 }
 
 if (!function_exists('canEditDrive')) {
-    // Kelola (rename/hapus/upload/share/visibility): admin, owner, atau share 'edit' (langsung/warisan).
-    // Share 'view', publik, dan divisi = baca saja.
+    // Kelola (rename/hapus/upload/share/visibility): owner, share 'edit' (langsung/warisan),
+    // atau admin bila tidak ada share eksplisit ke dirinya.
+    // Share 'view' (langsung/warisan), publik, dan divisi = baca saja — termasuk untuk admin,
+    // agar share view benar-benar read-only bagi penerimanya.
     function canEditDrive($conn, $folder, $user)
     {
         if (!$folder) return false;
-        $role = $user['role'] ?? null;
-        if ($role === 'admin') return true;
         $uid = (int)($user['id'] ?? 0);
         if ($uid > 0 && $uid === (int)($folder['owner_id'] ?? 0)) return true;
-        $sh = getDriveShareForUser($conn, $folder, $uid);
-        return $sh !== null && ($sh['permission'] ?? '') === 'edit';
+        if ($uid > 0) {
+            $sh = getDriveShareForUser($conn, $folder, $uid);
+            if ($sh !== null) return ($sh['permission'] ?? '') === 'edit';
+        }
+        return ($user['role'] ?? null) === 'admin';
     }
 }
 
