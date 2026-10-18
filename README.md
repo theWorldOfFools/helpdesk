@@ -236,13 +236,16 @@ helpdesk/
 │   ├── env.php             # Loader .env minimal
 │   ├── header.php          # Template + DataTables/Chart.js CDN
 │   └── footer.php          # Template + datatables-grids.js/dashboard-charts.js/reports.js
-└── assets/
-    ├── css/style.css
-    └── js/
-        ├── script.js
-        ├── datatables-grids.js   # DataTables tiket/users/divisi/workload
-        ├── dashboard-charts.js  # Chart.js + leaderboard fetch
-        └── reports.js           # Menu laporan fetch + analisa
+├── assets/
+│   ├── css/style.css
+│   └── js/
+│       ├── script.js
+│       ├── datatables-grids.js   # DataTables tiket/users/divisi/workload
+│       ├── dashboard-charts.js  # Chart.js + leaderboard fetch
+│       └── reports.js           # Menu laporan fetch + analisa
+└── docs/
+    ├── drive-share-view-only-fix.md  # Laporan perbaikan bug share view Drive (end-to-end)
+    └── img/                          # Screenshot tiap halaman (sebelum & sesudah perbaikan)
 ```
 
 ## Konfigurasi RBAC
@@ -283,6 +286,7 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - Change Request end-to-end (terpisah dari tiket): buat + tabel dinamis Jenis Perubahan (Penambahan/Perubahan/Design, 1–20 baris), daftar + API server-side, detail + tindak lanjut + diskusi/riwayat, edit/hapus admin, nomor CR-YYYYMM-XXXX anti-race, SLA jam kerja, notifikasi, widget dashboard + laporan + export
 - Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, profil/password ikut SIMRS
 - Drive & Dokumen internal (`drive.php` + `drive_action.php` + `drive_download.php`, migrasi `020_drive.sql`): folder hierarkis maks 5 level + subfolder, upload multi-file (10 file/request, 50MB/file, 500MB/user), preview gambar/PDF, pencarian global, sharing privat/divisi/publik + share per-user (view/edit, menurun ke subfolder), download aman via cek hak, notifikasi saat di-share, audit `activity_log`
+- **Perbaikan bug (18 Okt 2026):** share Drive `view` kini benar-benar read-only — hak share paling spesifik menang (share `view` di folder mengalahkan `edit` warisan) dan share `view` eksplisit mengikat semua penerima, termasuk admin. Detail + screenshot: [`docs/drive-share-view-only-fix.md`](docs/drive-share-view-only-fix.md)
 - Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
 
 ### Menambah Pengguna Baru
@@ -295,6 +299,104 @@ VALUES ('newuser', 'hashed_password', 'Nama Lengkap', 'teknisi', 'IT Support');
 ```
 
 Gunakan `password_hash('password', PASSWORD_BCRYPT)` untuk generate hash password.
+
+## Perbaikan Bug — Share `view` pada Drive (18 Oktober 2026)
+
+**Masalah:** penerima share `view` masih bisa menghapus file di folder yang dibagikan.
+
+**Akar masalah:**
+1. `getDriveShareForUser()` memakai aturan "hak tertinggi menang" — share `edit` di folder
+   induk mengalahkan share `view` yang diberikan langsung di folder anak.
+2. `canEditDrive()` selalu memberi role admin hak kelola tanpa memedulikan share eksplisit.
+   Bukti audit: folder **"SOP"** dibagikan `view` ke Administrator, lalu Administrator
+   berhasil menghapus file di dalamnya (`activity_log` 2026-10-10 12:06:25).
+
+**Perbaikan (commit `9eec9c0`, `includes/drive_auth.php`):** hak paling spesifik menang
+(share `view` langsung mengalahkan `edit` warisan; `edit` terdekat tetap bisa mengelola),
+dan share `view` eksplisit mengikat semua penerima termasuk admin. Admin tetap superuser
+default pada folder yang tidak di-share eksplisit ke dirinya. Laporan lengkap:
+[`docs/drive-share-view-only-fix.md`](docs/drive-share-view-only-fix.md).
+
+### Sebelum perbaikan (reproduksi bug)
+
+1. Owner (teknisi) membuat folder **"Demo Bugfix Sharing"**, upload `Contoh-Panduan-SOP.txt`,
+   lalu membagikan ke Administrator dengan permission **`view (baca)`** — flash
+   "Folder dibagikan ke Administrator (view)." dan badge `view` tampil di daftar share.
+2. Administrator membuka folder tersebut. **Tombol hapus (ikon tempat sampah), rename, panel
+   upload, dan kontrol share tetap muncul** padahal permission-nya hanya `view`:
+
+   <img src="docs/img/11-before-delete-button-visible.png" alt="Sebelum perbaikan: tombol hapus tetap muncul untuk penerima view" width="780">
+
+3. Administrator klik tombol hapus → file **berhasil dihapus** oleh penerima `view`:
+
+   <img src="docs/img/12-before-delete-success.png" alt="Sebelum perbaikan: file berhasil dihapus padahal share view" width="780">
+
+### Setelah perbaikan (verifikasi end-to-end per halaman)
+
+1. **Login** semua aktor (`login.php`):
+
+   <img src="docs/img/01-login.png" alt="Halaman login" width="780">
+
+2. **Drive root owner** (`drive.php`) — panel "Folder baru di Root":
+
+   <img src="docs/img/02-drive-root-owner.png" alt="Drive root owner" width="780">
+
+3. **Folder dibuat** — flash "Folder ... dibuat.":
+
+   <img src="docs/img/03-folder-created.png" alt="Folder berhasil dibuat" width="780">
+
+4. **Folder owner + file** — panel upload dan tombol Lihat/Unduh/rename/hapus untuk owner:
+
+   <img src="docs/img/04-owner-folder-with-file.png" alt="Folder owner dengan file" width="780">
+
+5. **Bagikan `view`** — owner membagikan ke Administrator dengan permission `view (baca)`:
+
+   <img src="docs/img/05-share-view-admin.png" alt="Share view ke admin" width="780">
+
+6. **Drive root penerima** — folder tampil di daftar penerima:
+
+   <img src="docs/img/06-recipient-drive-root.png" alt="Drive root penerima" width="780">
+
+7. **Folder penerima (view-only)** — tanpa tombol hapus/rename/upload; panel share read-only;
+   badge `view` konsisten dengan hak yang berlaku:
+
+   <img src="docs/img/07-recipient-view-only-folder.png" alt="Folder view-only tanpa tombol kelola" width="780">
+
+8. **Percobaan hapus via POST (bypass UI)** — server menolak dengan flash
+   **"Anda tidak boleh menghapus file ini."** dan file tetap ada:
+
+   <img src="docs/img/08-delete-blocked-flash.png" alt="Hapus ditolak server" width="780">
+
+9. **Lihat/unduh tetap boleh** — hak `view` = baca (`drive_download.php`):
+
+   <img src="docs/img/09-recipient-preview.png" alt="Preview file tetap boleh" width="780">
+
+10. **Kasus live folder "SOP" #5** — Administrator yang di-share `view` pada folder milik
+    user lain hanya melihat aksi baca:
+
+    <img src="docs/img/10-live-sop-view-only.png" alt="Kasus live SOP view-only" width="780">
+
+11. **Regresi owner/admin tanpa share** — owner (dan admin tanpa share eksplisit) tetap bisa
+    upload/rename/hapus file miliknya; **pembersihan** folder demo dilakukan oleh owner:
+
+    <img src="docs/img/13-cleanup-folder-deleted.png" alt="Folder demo dibersihkan" width="780">
+
+### Matriks hasil pengujian
+
+| # | Skenario | canView | canEdit | Hasil |
+|---|---|---|---|---|
+| 1 | Share `view` langsung di folder | true | false | ✅ PASS |
+| 2 | Share `edit` di ancestor + `view` langsung di folder | true | false | ✅ PASS |
+| 3 | Share `edit` di ancestor, tanpa share lebih dekat | true | true | ✅ PASS |
+| 4 | Share `view` di ancestor + `edit` langsung di folder | true | true | ✅ PASS |
+| 5 | Share `view` di ancestor, folder anak tanpa share | true | false | ✅ PASS |
+| 6 | Admin tanpa share (folder milik orang lain) | true | true | ✅ PASS |
+| 7 | Admin + share `view` langsung | true | false | ✅ PASS |
+| 8 | Admin + share `view` warisan | true | false | ✅ PASS |
+| 9 | Owner folder | true | true | ✅ PASS |
+| 10 | Live: admin + share `view` pada folder "SOP" #5 | true | false | ✅ PASS |
+| 11 | E2E HTTP: POST `file_delete` oleh penerima `view` | — | ditolak (flash error, file tetap ada) | ✅ PASS |
+| 12 | E2E HTTP: owner/admin tanpa share hapus file sendiri | — | berhasil | ✅ PASS |
 
 ## Kontribusi
 
