@@ -83,8 +83,8 @@ File config siap-paste: `docs/npm-advanced-helpdesk.txt`.
 
 Dua jebakan yang bikin `/sw.js` + `/assets/*` 404 walau upstream sehat:
 
-- `sub_filter` untuk rewrite aset (`/assets/` → `/helpdesk/assets/`) — halaman sudah memakai path relatif; rewrite ini membuat proxy menambah prefix dua kali → `/helpdesk/helpdesk/assets/...` → 404. Jangan pakai; hapus juga `proxy_set_header Accept-Encoding ""` (hanya perlu untuk sub_filter).
-- Custom Location regex ekstensi statis (`js|css|png|...`) yang proxy tanpa prefix `/helpdesk/` — regex location dievaluasi sebelum `location /`, sehingga `sw.js`/`assets/` nyasar ke root upstream (404) sementara `manifest.json` (json tidak masuk regex) tetap 200. Pastikan tab **Custom Locations** kosong.
+- `sub_filter` untuk rewrite aset (`assets/` → `/helpdesk/assets/`) — aman **hanya jika disertai blok `location /helpdesk/` passthrough** (lihat `docs/npm-advanced-helpdesk.txt`). Tanpa passthrough, URL hasil rewrite jatuh ke `location /` dan prefix `/helpdesk/` ditambahkan dua kali → `/helpdesk/helpdesk/assets/...` → 404. Alternatif paling minim: buang sub_filter dan blok `/helpdesk/` (halaman sudah memakai path relatif).
+- Custom Location regex ekstensi statis (`js|css|png|...`) yang proxy tanpa prefix `/helpdesk/` — regex location dievaluasi sebelum `location /`, sehingga `sw.js`/`assets/` nyasar ke root upstream (404) sementara `manifest.json` (json tidak masuk regex) tetap 200. Idealnya tab **Custom Locations** dikosongkan. Kalau tidak ketemu/tidak bisa dihapus: tambahkan `location = /sw.js` dan `location ^~ /assets/` — exact match (`=`) dan prefix (`^~`) **menang atas regex**, jadi `/sw.js` + `/assets/*` tetap sampai ke upstream yang benar (lihat `docs/npm-advanced-helpdesk.txt`).
 
 Setelah proxy benar: uninstall shortcut lama → Chrome → pengaturan situs → **Hapus & setel ulang** → buka ulang → **Install app**.
 
