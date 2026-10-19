@@ -48,6 +48,37 @@ if (!function_exists('tgApi')) {
     }
 }
 
+if (!function_exists('tgBotIdentity')) {
+    // Identitas bot (id + username) untuk deteksi tag di group.
+    // getMe sekali bila username belum diisi di .env/settings, lalu simpan agar request berikutnya cepat.
+    function tgBotIdentity()
+    {
+        static $identity = null;
+        if ($identity !== null) return $identity;
+        $c = tgConfig();
+        $username = ltrim((string)($c['username'] ?? ''), '@');
+        $id = 0;
+        if ($username === '') {
+            $me = tgApi('getMe');
+            if ($me) {
+                $id = (int)($me['result']['id'] ?? 0);
+                $username = ltrim((string)($me['result']['username'] ?? ''), '@');
+                if ($username !== '') {
+                    try {
+                        $conn = getDBConnection();
+                        @pg_query_params($conn,
+                            "INSERT INTO settings (kunci, nilai, keterangan) VALUES ('telegram_bot_username',$1,'username bot tanpa @') ON CONFLICT (kunci) DO UPDATE SET nilai = EXCLUDED.nilai",
+                            [$username]);
+                        pg_close($conn);
+                    } catch (Throwable $e) {
+                    }
+                }
+            }
+        }
+        return $identity = ['id' => $id, 'username' => $username];
+    }
+}
+
 if (!function_exists('tgSend')) {
     function tgSend($chatId, $text, $keyboard = null, $parseMode = 'HTML')
     {

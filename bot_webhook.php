@@ -2,6 +2,7 @@
 // Webhook Telegram: 1 bot -> group chat, submenu global dinamis, kenal Teknisi X.
 // Setup sekali: set URL https://domain/bot_webhook.php?secret=XXX via telegram_admin.php.
 // BotFather: /setprivacy -> Disable + jadikan bot admin group agar baca command group.
+// Di group bot hanya membalas command (/cmd) atau saat di-tag @username bot; obrolan biasa diabaikan.
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/telegram.php';
@@ -68,6 +69,50 @@ if (!empty($upd['callback_query'])) {
 if (empty($chatId) || empty($tgId)) {
     echo json_encode(['ok' => true]);
     exit;
+}
+
+// 2b) Di group: hanya merespons command atau saat bot di-tag (@username).
+// Pesan obrolan lain diabaikan diam-diam agar bot tidak berisik.
+if (empty($upd['callback_query']) && in_array((string)$chatType, ['group', 'supergroup'], true)) {
+    $bot = tgBotIdentity();
+    $botUser = strtolower((string)($bot['username'] ?? ''));
+    $mentioned = false;
+
+    foreach (($upd['message']['entities'] ?? []) as $en) {
+        $type = $en['type'] ?? '';
+        if ($type === 'mention' && $botUser !== '') {
+            $mt = strtolower(mb_substr($text, (int)($en['offset'] ?? 0), (int)($en['length'] ?? 0)));
+            if ($mt === '@' . $botUser) $mentioned = true;
+        } elseif ($type === 'text_mention' && !empty($bot['id']) && (int)($en['user']['id'] ?? 0) === (int)$bot['id']) {
+            $mentioned = true;
+        }
+        if ($mentioned) break;
+    }
+    if (!$mentioned && $botUser !== '' && preg_match('/(?<![\w])@' . preg_quote($botUser, '/') . '\b/i', $text)) {
+        $mentioned = true;
+    }
+
+    if ($mentioned) {
+        // Buang tag dari teks; bila tak ada command setelahnya, tampilkan menu utama.
+        $stripped = $botUser !== ''
+            ? trim((string)preg_replace('/(?<![\w])@' . preg_quote($botUser, '/') . '\b/i', '', $text))
+            : '';
+        $text = ($stripped !== '' && $stripped[0] === '/') ? $stripped : '/help';
+    }
+
+    $first = strtok($text, " \t\n");
+    $isCommand = is_string($first) && $first !== '' && $first[0] === '/';
+    $cmdTarget = null;
+    if ($isCommand && strpos($first, '@') !== false) {
+        $cmdTarget = strtolower(substr($first, strpos($first, '@') + 1));
+    }
+    $forOtherBot = $isCommand && $cmdTarget !== null && $cmdTarget !== $botUser;
+    $fromBot = !empty($upd['message']['from']['is_bot']);
+
+    if ($fromBot || $forOtherBot || (!$isCommand && !$mentioned)) {
+        echo json_encode(['ok' => true]);
+        exit;
+    }
 }
 
 $conn = getDBConnection();
