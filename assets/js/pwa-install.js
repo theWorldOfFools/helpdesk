@@ -31,7 +31,8 @@
         if (isAndroid) {
             return '<p class="mb-2">Di <b>Chrome Android</b>:</p>'
                 + '<ol class="mb-0"><li>Ketuk menu <b>⋮</b> di kanan atas.</li><li>Pilih <b>Install app</b> / <b>Add to Home screen</b>.</li><li>Konfirmasi <b>Install</b>.</li></ol>'
-                + '<p class="small text-secondary mt-2 mb-0">Bila menu itu tidak muncul, pastikan situs dibuka lewat HTTPS lalu muat ulang.</p>';
+                + '<p class="small text-secondary mt-2 mb-0">Bila menu itu tidak muncul, pastikan situs dibuka lewat HTTPS lalu muat ulang.</p>'
+                + '<p class="small text-secondary mt-2 mb-0">Bila muncul pesan <b>&quot;Tidak dapat menginstal&quot;</b> dari Chrome: itu kegagalan WebAPK lewat layanan Google. Coba pakai data seluler (bukan WiFi kantor), update Chrome + Google Play Services, pastikan ruang penyimpanan cukup, lalu ulangi.</p>';
         }
         return '<p class="mb-0">Buka lewat <b>Chrome/Edge</b> di HP, lalu pilih <b>Install app</b> dari menu browser.</p>';
     }

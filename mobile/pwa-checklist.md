@@ -40,3 +40,22 @@
 - [ ] Solusi permanen: aktifkan HTTPS di server (domain + Let's Encrypt, atau sertifikat internal + CA di-trust di HP).
 - [ ] Solusi uji cepat (HP sendiri): `chrome://flags/#unsafely-treat-insecure-origin-as-secure` → isi alamat situs → **Enabled** → restart Chrome.
 - [ ] Setelah HTTPS aktif, muat ulang halaman; `beforeinstallprompt` memunculkan tombol **Pasang Aplikasi**.
+
+## 6) Server produksi (reverse proxy)
+
+Semua URL di bawah harus **200** dari luar, dari base URL yang sama dengan halaman login:
+
+- [ ] `curl -I https://domain/login.php` → 200
+- [ ] `curl -I https://domain/manifest.json` → 200 (JSON)
+- [ ] `curl -I https://domain/sw.js` → 200 (`text/javascript`, bukan halaman 404 Apache)
+- [ ] `curl -I https://domain/assets/icons/icon-192.png` dan `assets/icons/icon-512.png` → 200 (`image/png`)
+
+Gejala proxy "terbelah" (PHP/manifest di root, `sw.js`/`assets/` hanya di subfolder):
+
+- Manifest termuat tapi `/assets/icons/*` 404 → Chrome gagal mengambil ikon.
+- SW didaftarkan relatif (`sw.js`) tapi `/sw.js` 404 → service worker tidak pernah aktif.
+- Ditambah cakupan `start_url`/scope tidak konsisten → instal berakhir dengan notifikasi Chrome **"Tidak dapat menginstal ..."** (kegagalan WebAPK minting di sisi Google: `IDS_NOTIFICATION_WEBAPK_INSTALL_FAILED`).
+
+Perbaikan: samakan base URL 1 server — halaman, `manifest.json`, `sw.js`, dan `assets/` semua di root domain yang sama. Deploy file repo apa adanya (path aset relatif); jangan menambal path jadi absolut `/subfolder/...` karena memecah scope service worker. Setelah proxy benar: uninstall shortcut lama → Chrome → pengaturan situs → **Hapus & setel ulang** → buka ulang → **Install app**.
+
+Catatan: `APP_URL` di `.env` **tidak** memengaruhi install PWA; nilainya hanya dipakai untuk menyusun link di pesan Telegram.
