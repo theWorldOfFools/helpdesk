@@ -202,6 +202,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                 <?php endif; ?>
 
                 <p class="side-label">Akun</p>
+                <button type="button" class="nav-link side-link text-start d-none" data-pwa-install>
+                    <i class="bi bi-phone"></i> Pasang Aplikasi
+                </button>
                 <a href="profile.php" class="nav-link side-link<?php echo side_link_active('profile.php', $activePage); ?>">
                     <i class="bi bi-person-circle"></i> Profil Saya
                 </a>

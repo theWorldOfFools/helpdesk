@@ -286,6 +286,10 @@ pg_close($conn);
                         Setelah login kamu diarahkan otomatis:<br>
                         <strong>Admin</strong> → Dashboard &nbsp;·&nbsp; <strong>Teknisi</strong> → Daftar Tiket &nbsp;·&nbsp; <strong>Pelapor</strong> → Buat Tiket
                     </div>
+
+                    <button type="button" class="btn btn-outline-secondary w-100 mt-3 d-none" data-pwa-install>
+                        <i class="bi bi-phone me-1"></i> Pasang aplikasi di HP
+                    </button>
                 </section>
             </div>
         </div>
@@ -293,6 +297,7 @@ pg_close($conn);
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/pwa-install.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js').catch(function () {});

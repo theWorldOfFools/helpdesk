@@ -1,18 +1,25 @@
 {
+  "id": "./login.php",
   "name": "Helpdesk IT — Sistem Tiket Operasional",
   "short_name": "Helpdesk IT",
   "description": "Lapor, pantau, dan selesaikan kendala IT dalam satu tempat.",
   "start_url": "./login.php",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "assets/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "assets/icons/icon-512.png",

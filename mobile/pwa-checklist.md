@@ -7,8 +7,9 @@
 
 ## 1) Android — Chrome
 
-- [ ] Buka `https://domain/` → login sebagai pelapor.
-- [ ] Menu ⋮ → **Add to Home screen** / **Install app**.
+- [ ] Buka `https://domain/` (wajib HTTPS; `http://IP` tidak bisa install) → login sebagai pelapor.
+- [ ] Tombol **Pasang Aplikasi** di sidebar/login muncul → klik → prompt Install native.
+- [ ] Fallback: menu ⋮ → **Install app** / **Add to Home screen**.
 - [ ] Buka dari ikon: tampil fullscreen tanpa address bar (mode standalone).
 - [ ] Buat tiket + lampirkan foto dari kamera → tersimpan di `uploads/tickets/`.
 - [ ] Tutup total → buka lagi → masih login (remember-me; atau login ulang bila sesi habis).
@@ -30,4 +31,12 @@
 
 - [ ] Chrome laptop → DevTools → Application → Manifest: ikon 192/512 ✅, shortcuts ✅.
 - [ ] Lighthouse → kategori PWA: target **Installable** centang hijau.
-- [ ] Application → Service Workers: `sw.js` aktif; Cache Storage: `helpdesk-v2`.
+- [ ] Application → Service Workers: `sw.js` aktif; Cache Storage: `helpdesk-v3`.
+
+## 5) Troubleshooting install Android
+
+- [ ] Menu **Install app** tidak muncul / tombol hanya menampilkan panduan = halaman bukan secure context.
+      Cek address bar harus `https://` berlogo gembok. `http://IP-LAN` **tidak bisa install PWA** (Chrome blokir service worker).
+- [ ] Solusi permanen: aktifkan HTTPS di server (domain + Let's Encrypt, atau sertifikat internal + CA di-trust di HP).
+- [ ] Solusi uji cepat (HP sendiri): `chrome://flags/#unsafely-treat-insecure-origin-as-secure` → isi alamat situs → **Enabled** → restart Chrome.
+- [ ] Setelah HTTPS aktif, muat ulang halaman; `beforeinstallprompt` memunculkan tombol **Pasang Aplikasi**.

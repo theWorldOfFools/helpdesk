@@ -28,6 +28,7 @@
     <?php endif; ?>
     <?php endif; ?>
     <script src="assets/js/script.js"></script>
+    <script src="assets/js/pwa-install.js"></script>
     <script>
       // PWA: daftarkan service worker (aset statis saja, halaman dinamis tidak di-cache)
       if ('serviceWorker' in navigator) {
