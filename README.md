@@ -120,10 +120,12 @@ psql -U postgres -d helpdesk_db -f migrations/017_dev_tasks.sql
 psql -U postgres -d helpdesk_db -f migrations/018_dev_task_assignees.sql
 psql -U postgres -d helpdesk_db -f migrations/019_dev_task_attachments.sql
 psql -U postgres -d helpdesk_db -f migrations/020_drive.sql
+psql -U postgres -d helpdesk_db -f migrations/021_telegram.sql
+psql -U postgres -d helpdesk_db -f migrations/022_kb_shares.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→020 dari schema kosong.
-> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020` idempoten (`IF NOT EXISTS`) sehingga aman
+> Catatan: migrasi wajib dijalankan berurutan 001→022 dari schema kosong.
+> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020`, `021`, `022` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
 > `uploads/change_requests/` writable.
@@ -278,6 +280,7 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - Menu Laporan eksekutif: KPI, analisa otomatis, tren, SLA respons/resolusi, breach list, kelola hari libur, export CSV/XLSX/PDF
 - Modul akun: profil + ganti password, remember-me fungsional, wajib ganti password default, reset oleh admin, log aktivitas
 - Knowledge base: artikel solusi + template jawaban sekali klik di modal tindak lanjut
+- Basis Solusi — Bagikan publik: admin/teknisi bisa membuat link token per artikel (`kb_share.php?token=…`) yang bisa dibaca tanpa login (hanya-lihat, `noindex`, permanen sampai dicabut; migrasi `022_kb_shares.sql`)
 - Target SLA & respons jadi setting DB (diubah admin via menu Laporan, tanpa coding)
 - Notifikasi in-app: bell + halaman, terpicu saat tiket dibuat/diubah
 - PWA dasar: manifest + ikon + service worker (cache aset statis)

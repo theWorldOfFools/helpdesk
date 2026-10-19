@@ -2,6 +2,33 @@
 // Kelola artikel & template jawaban — admin + teknisi.
 require_once 'config.php';
 $user = requireRole(['admin', 'teknisi']);
+
+// Aksi bagikan mengarah balik ke halaman baca → proses SEBELUM output header (agar redirect valid).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['act'] ?? '', ['share_create', 'share_revoke'], true)) {
+    requireCsrf();
+    $conn = getDBConnection();
+    $id = (int)($_POST['id'] ?? 0);
+    $r = pg_query_params($conn, "SELECT id, share_token FROM kb_articles WHERE id = $1", [$id]);
+    $row = ($r && pg_num_rows($r) > 0) ? pg_fetch_assoc($r) : null;
+    if ($r) pg_free_result($r);
+    if (!$row) {
+        $_SESSION['flash_error'] = 'Artikel tidak ditemukan.';
+    } elseif ($_POST['act'] === 'share_create') {
+        if (empty($row['share_token'])) {
+            pg_query_params($conn, "UPDATE kb_articles SET share_token = $1, share_created_at = NOW(), share_created_by = $2 WHERE id = $3", [bin2hex(random_bytes(16)), $user['id'], $id]);
+            logActivity($conn, $user['id'], 'kb_share_create', 'Link bagikan publik dibuat untuk artikel #' . $id);
+        }
+        $_SESSION['flash_ok'] = 'Link bagikan aktif. Salin dan kirimkan ke penerima.';
+    } else {
+        pg_query_params($conn, "UPDATE kb_articles SET share_token = NULL, share_created_at = NULL, share_created_by = NULL WHERE id = $1", [$id]);
+        logActivity($conn, $user['id'], 'kb_share_revoke', 'Link bagikan artikel #' . $id . ' dicabut');
+        $_SESSION['flash_ok'] = 'Link bagikan dicabut.';
+    }
+    pg_close($conn);
+    header('Location: kb.php?id=' . $id);
+    exit;
+}
+
 $pageTitle = 'Kelola Basis Solusi';
 require_once 'includes/header.php';
 

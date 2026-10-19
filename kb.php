@@ -4,6 +4,9 @@ require_once 'config.php';
 requireLogin();
 
 $user = getCurrentUser();
+$flashOk = $_SESSION['flash_ok'] ?? null;
+$flashErr = $_SESSION['flash_error'] ?? flash_error();
+unset($_SESSION['flash_ok'], $_SESSION['flash_error']);
 $pageTitle = 'Basis Solusi';
 require_once 'includes/header.php';
 
@@ -38,6 +41,15 @@ if (!empty($_GET['id'])) {
     if ($vr && pg_num_rows($vr) > 0) $view = pg_fetch_assoc($vr);
     if ($vr) pg_free_result($vr);
 }
+$shareUrl = '';
+if ($view && !empty($view['share_token'])) {
+    $base = rtrim((string)env('APP_URL', ''), '/');
+    if ($base === '') {
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $base = $scheme . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    }
+    $shareUrl = $base . '/kb_share.php?token=' . rawurlencode($view['share_token']);
+}
 ?>
 
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
@@ -50,6 +62,9 @@ if (!empty($_GET['id'])) {
     <?php endif; ?>
 </div>
 
+<?php if ($flashOk): ?><div class="alert alert-success py-2"><?php echo e($flashOk); ?></div><?php endif; ?>
+<?php if ($flashErr): ?><div class="alert alert-danger py-2"><?php echo e($flashErr); ?></div><?php endif; ?>
+
 <?php if ($view): ?>
 <div class="card mb-4"><div class="card-body">
     <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
@@ -59,6 +74,32 @@ if (!empty($_GET['id'])) {
         <a href="kb.php" class="btn btn-sm btn-outline-secondary">← Kembali</a>
     </div>
     <div class="rich-content"><?php echo renderTicketDescription($view['isi']); ?></div>
+    <?php if (in_array($user['role'], ['admin', 'teknisi'], true)): ?>
+    <hr class="my-3">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2">
+        <div class="small text-secondary"><i class="bi bi-share me-1"></i><strong>Bagikan solusi:</strong> link bisa dibaca tanpa login (hanya-lihat).</div>
+        <?php if ($shareUrl !== ''): ?>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <input type="text" id="kbShareUrl" class="form-control form-control-sm" style="min-width:240px;max-width:380px;" readonly value="<?php echo e($shareUrl); ?>">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="kbShareCopy"><i class="bi bi-clipboard"></i> Salin</button>
+            <button type="button" class="btn btn-sm btn-primary" id="kbShareNative"><i class="bi bi-share"></i> Bagikan</button>
+            <form method="POST" action="kb_manage.php" class="d-inline" onsubmit="return confirm('Cabut link bagikan? Link yang sudah tersebar tidak bisa dipakai lagi.')">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="act" value="share_revoke">
+                <input type="hidden" name="id" value="<?php echo (int)$view['id']; ?>">
+                <button type="submit" class="btn btn-sm btn-outline-danger">Cabut</button>
+            </form>
+        </div>
+        <?php else: ?>
+        <form method="POST" action="kb_manage.php">
+            <?php echo csrf_field(); ?>
+            <input type="hidden" name="act" value="share_create">
+            <input type="hidden" name="id" value="<?php echo (int)$view['id']; ?>">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-share me-1"></i>Buat link bagikan</button>
+        </form>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
 </div></div>
 <?php endif; ?>
 
@@ -82,5 +123,38 @@ if (!empty($_GET['id'])) {
 <?php if (empty($arts)): ?><div class="col-12"><div class="alert alert-light border text-center text-secondary">Belum ada artikel. <?php if (in_array($user['role'], ['admin', 'teknisi'], true)): ?><a href="kb_manage.php">Tulis yang pertama →</a><?php endif; ?></div></div><?php endif; ?>
 </div>
 
+<?php if ($view && $shareUrl !== '' && in_array($user['role'], ['admin', 'teknisi'], true)): ?>
+<script>
+(function () {
+    var input = document.getElementById('kbShareUrl');
+    var copyBtn = document.getElementById('kbShareCopy');
+    var nativeBtn = document.getElementById('kbShareNative');
+    if (!input || !copyBtn || !nativeBtn) return;
+    function flashCopied() {
+        var old = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="bi bi-check2"></i> Tersalin';
+        setTimeout(function () { copyBtn.innerHTML = old; }, 1500);
+    }
+    function copyLink() {
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(input.value).then(flashCopied).catch(function () { document.execCommand('copy'); flashCopied(); });
+        } else {
+            document.execCommand('copy');
+            flashCopied();
+        }
+    }
+    copyBtn.addEventListener('click', copyLink);
+    nativeBtn.addEventListener('click', function () {
+        if (navigator.share) {
+            navigator.share({ title: <?php echo json_encode($view['judul'], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>, url: input.value }).catch(function () {});
+        } else {
+            copyLink();
+        }
+    });
+})();
+</script>
+<?php endif; ?>
 <?php pg_close($conn); ?>
 <?php require_once 'includes/footer.php'; ?>
