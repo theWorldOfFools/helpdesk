@@ -56,6 +56,34 @@ Gejala proxy "terbelah" (PHP/manifest di root, `sw.js`/`assets/` hanya di subfol
 - SW didaftarkan relatif (`sw.js`) tapi `/sw.js` 404 → service worker tidak pernah aktif.
 - Ditambah cakupan `start_url`/scope tidak konsisten → instal berakhir dengan notifikasi Chrome **"Tidak dapat menginstal ..."** (kegagalan WebAPK minting di sisi Google: `IDS_NOTIFICATION_WEBAPK_INSTALL_FAILED`).
 
-Perbaikan: samakan base URL 1 server — halaman, `manifest.json`, `sw.js`, dan `assets/` semua di root domain yang sama. Deploy file repo apa adanya (path aset relatif); jangan menambal path jadi absolut `/subfolder/...` karena memecah scope service worker. Setelah proxy benar: uninstall shortcut lama → Chrome → pengaturan situs → **Hapus & setel ulang** → buka ulang → **Install app**.
+Perbaikan: samakan base URL 1 server — halaman, `manifest.json`, `sw.js`, dan `assets/` semua di root domain yang sama. Deploy file repo apa adanya (path aset relatif); jangan menambal path jadi absolut `/subfolder/...` karena memecah scope service worker.
+
+Contoh **Advanced** di Nginx Proxy Manager bila aplikasi upstream ada di subfolder `/helpdesk/` (root domain dipetakan ke `/helpdesk/`):
+
+```nginx
+location /helpdesk/ {
+    proxy_pass http://<IP-APP>:8181;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+location / {
+    proxy_pass http://<IP-APP>:8181/helpdesk/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_redirect http://<IP-APP>:8181/helpdesk/ /;
+    proxy_redirect http://<IP-APP>:8181/ /;
+}
+```
+
+Dua jebakan yang bikin `/sw.js` + `/assets/*` 404 walau upstream sehat:
+
+- `sub_filter` untuk rewrite aset (`/assets/` → `/helpdesk/assets/`) — halaman sudah memakai path relatif; rewrite ini membuat proxy menambah prefix dua kali → `/helpdesk/helpdesk/assets/...` → 404. Jangan pakai; hapus juga `proxy_set_header Accept-Encoding ""` (hanya perlu untuk sub_filter).
+- Custom Location regex ekstensi statis (`js|css|png|...`) yang proxy tanpa prefix `/helpdesk/` — regex location dievaluasi sebelum `location /`, sehingga `sw.js`/`assets/` nyasar ke root upstream (404) sementara `manifest.json` (json tidak masuk regex) tetap 200. Pastikan tab **Custom Locations** kosong.
+
+Setelah proxy benar: uninstall shortcut lama → Chrome → pengaturan situs → **Hapus & setel ulang** → buka ulang → **Install app**.
 
 Catatan: `APP_URL` di `.env` **tidak** memengaruhi install PWA; nilainya hanya dipakai untuk menyusun link di pesan Telegram.
