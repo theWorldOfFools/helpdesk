@@ -1,0 +1,52 @@
+# ============================================================
+# Nginx Proxy Manager — isi tab "Advanced"
+# Proxy Host : helpdesk.rswilliamboothsby.com
+# Fungsi     : seluruh root domain dipetakan ke aplikasi yang
+#              berada di subfolder /helpdesk/ pada app server
+#              (Apache, port 8181).
+# ============================================================
+#
+# CARA PAKAI
+# 1. NPM > Hosts > Proxy Hosts > helpdesk.rswilliamboothsby.com > Edit
+# 2. Tab "Custom Locations": HAPUS SEMUA. Khususnya location regex
+#    ekstensi statis (.js/.css/.png/...) — regex location dievaluasi
+#    SEBELUM "location /", sehingga /sw.js dan /assets/* diproxy
+#    TANPA prefix /helpdesk/ dan berakhir 404 di root upstream.
+# 3. Tab "Advanced": hapus isinya, lalu paste SELURUH isi file ini
+#    (mulai dari baris "location /helpdesk/"), Save.
+# 4. Verifikasi dari luar — keempat URL ini harus 200:
+#      /login.php
+#      /manifest.json
+#      /sw.js
+#      /assets/icons/icon-192.png
+#
+# CATATAN PENTING
+# - Ganti 192.168.214.222:8181 bila IP/port app server berubah.
+# - JANGAN pakai sub_filter untuk rewrite aset. Halaman sudah memakai
+#   path relatif; rewrite /assets/ -> /helpdesk/assets/ membuat proxy
+#   menambah prefix dua kali (/helpdesk/helpdesk/assets/...) -> 404.
+# - JANGAN set "proxy_set_header Accept-Encoding """ — itu hanya
+#   dibutuhkan oleh sub_filter dan mematikan kompresi.
+# - Blok "/helpdesk/" adalah jaring aman agar URL lama /helpdesk/...
+#   (sisa config sebelumnya / ter-cache di HP) tetap berfungsi.
+# ============================================================
+
+location /helpdesk/ {
+    proxy_pass http://192.168.214.222:8181;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Scheme $scheme;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+
+location / {
+    proxy_pass http://192.168.214.222:8181/helpdesk/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Scheme $scheme;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_redirect http://192.168.214.222:8181/helpdesk/ /;
+    proxy_redirect http://192.168.214.222:8181/ /;
+}

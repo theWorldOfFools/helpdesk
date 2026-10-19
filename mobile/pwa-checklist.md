@@ -79,6 +79,8 @@ location / {
 }
 ```
 
+File config siap-paste: `docs/npm-advanced-helpdesk.txt`.
+
 Dua jebakan yang bikin `/sw.js` + `/assets/*` 404 walau upstream sehat:
 
 - `sub_filter` untuk rewrite aset (`/assets/` → `/helpdesk/assets/`) — halaman sudah memakai path relatif; rewrite ini membuat proxy menambah prefix dua kali → `/helpdesk/helpdesk/assets/...` → 404. Jangan pakai; hapus juga `proxy_set_header Accept-Encoding ""` (hanya perlu untuk sub_filter).
