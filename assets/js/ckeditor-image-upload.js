@@ -60,7 +60,14 @@
         if (this.abortController) this.abortController.abort();
     };
 
-    // Helper bersama untuk form Ticket/CR: CKEditor + upload gambar ke server.
+    // Plugin CKEditor untuk register upload adapter sebelum editor ready
+    function HelpdeskUploadAdapterPlugin(editor) {
+        editor.plugins.get('FileRepository').createUploadAdapter = function (loader) {
+            return new HelpdeskUploadAdapter(loader);
+        };
+    }
+
+    // Helper bersama untuk form Ticket/CR/Todo: CKEditor + upload gambar ke server.
     window.createHelpdeskEditor = function (element, options) {
         if (!window.ClassicEditor || !element) return Promise.resolve(null);
 
@@ -83,17 +90,15 @@
                     'imageStyle:inline', 'imageStyle:block', 'imageStyle:side', '|',
                     'toggleImageCaption', 'imageTextAlternative'
                 ]
+            },
+            // Register upload adapter early via extraPlugins
+            extraPlugins: [HelpdeskUploadAdapterPlugin],
+            // Allow pasting images from Word (base64, blob, file://)
+            clipboard: {
+                // default handles base64/blob/file:// via ImageUploadEditing
             }
         };
 
-        return window.ClassicEditor.create(element, config).then(function (editor) {
-            var repository = editor.plugins.get('FileRepository');
-            if (repository) {
-                repository.createUploadAdapter = function (loader) {
-                    return new HelpdeskUploadAdapter(loader);
-                };
-            }
-            return editor;
-        });
+        return window.ClassicEditor.create(element, config);
     };
 })();
