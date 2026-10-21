@@ -8,65 +8,6 @@
         return input ? input.value : '';
     }
 
-    function HelpdeskUploadAdapter(loader) {
-        this.loader = loader;
-        this.abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    }
-
-    HelpdeskUploadAdapter.prototype.upload = function () {
-        var self = this;
-        return this.loader.file.then(function (file) {
-            return new Promise(function (resolve, reject) {
-                var data = new FormData();
-                data.append('upload', file, file.name);
-
-                var token = csrfToken();
-                if (token) data.append('csrf_token', token);
-
-                var headers = { 'Accept': 'application/json' };
-                if (token) headers['X-CSRF-Token'] = token;
-
-                var options = {
-                    method: 'POST',
-                    body: data,
-                    credentials: 'same-origin',
-                    headers: headers
-                };
-                if (self.abortController) options.signal = self.abortController.signal;
-
-                var endpoint = window.HELPDESK_EDITOR_UPLOAD_URL || 'editor_upload.php';
-
-                fetch(endpoint, options)
-                    .then(function (response) {
-                        return response.json().catch(function () { return {}; }).then(function (json) {
-                            if (!response.ok || !json.url) {
-                                var message = json && json.error && json.error.message
-                                    ? json.error.message
-                                    : 'Gagal mengunggah gambar.';
-                                throw new Error(message);
-                            }
-                            resolve({ default: json.url });
-                        });
-                    })
-                    .catch(function (error) {
-                        if (error && error.name === 'AbortError') return;
-                        reject(error && error.message ? error.message : 'Gagal mengunggah gambar.');
-                    });
-            });
-        });
-    };
-
-    HelpdeskUploadAdapter.prototype.abort = function () {
-        if (this.abortController) this.abortController.abort();
-    };
-
-    // Plugin CKEditor untuk register upload adapter sebelum editor ready
-    function HelpdeskUploadAdapterPlugin(editor) {
-        editor.plugins.get('FileRepository').createUploadAdapter = function (loader) {
-            return new HelpdeskUploadAdapter(loader);
-        };
-    }
-
     // Helper bersama untuk form Ticket/CR/Todo: CKEditor + upload gambar ke server.
     window.createHelpdeskEditor = function (element, options) {
         if (!window.ClassicEditor || !element) return Promise.resolve(null);
@@ -80,6 +21,7 @@
             'undo', 'redo'
         ];
 
+        var token = csrfToken();
         var config = {
             toolbar: opts.toolbar || defaultToolbar,
             image: {
@@ -91,11 +33,13 @@
                     'toggleImageCaption', 'imageTextAlternative'
                 ]
             },
-            // Register upload adapter early via extraPlugins
-            extraPlugins: [HelpdeskUploadAdapterPlugin],
-            // Allow pasting images from Word (base64, blob, file://)
-            clipboard: {
-                // default handles base64/blob/file:// via ImageUploadEditing
+            // Simple upload adapter config (CKEditor 5 built-in)
+            simpleUpload: {
+                uploadUrl: 'editor_upload.php',
+                headers: token ? {
+                    'X-CSRF-Token': token
+                } : {},
+                withCredentials: true
             }
         };
 
