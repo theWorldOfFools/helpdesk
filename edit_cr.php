@@ -360,6 +360,7 @@ $todayMin = date('Y-m-d') . 'T00:00';
                 <div class="mt-3">
                     <label for="keterangan" class="form-label">Keterangan</label>
                     <textarea id="keterangan" class="form-control" name="keterangan" rows="8"><?php echo htmlspecialchars($cr['keterangan']); ?></textarea>
+                    <div class="form-text">Bisa format bold, list, heading, link, dan gambar (maks 5MB). Rincian per-baris diisi di tabel Jenis Perubahan di bawah.</div>
                 </div>
 
                 <div class="mt-3">
@@ -481,6 +482,7 @@ $todayMin = date('Y-m-d') . 'T00:00';
 </form>
 
 <script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
+<script src="assets/js/ckeditor-image-upload.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.7/dist/notiflix-aio-3.2.7.min.js"></script>
 <script>
 (function () {
@@ -502,9 +504,10 @@ $todayMin = date('Y-m-d') . 'T00:00';
     var ket = document.getElementById('keterangan');
     var form = document.getElementById('crForm');
     var editorInstance = null;
-    if (window.ClassicEditor && ket) {
-        ClassicEditor.create(ket, { toolbar: ['heading', '|', 'bold', 'italic', 'underline', 'link', 'bulletedList', 'numberedList', 'blockQuote', 'code', '|', 'undo', 'redo'] })
-            .then(function (editor) { editorInstance = editor; }).catch(function () {});
+    if (window.createHelpdeskEditor && ket) {
+        window.createHelpdeskEditor(ket).then(function (editor) {
+            editorInstance = editor;
+        }).catch(function () { /* fallback ke textarea biasa */ });
     }
     if (form) {
         form.addEventListener('submit', function (e) {

@@ -3,6 +3,8 @@ uploads/tickets/*
 !uploads/tickets/.htaccess
 uploads/change_requests/*
 !uploads/change_requests/.htaccess
+uploads/editor/*
+!uploads/editor/.htaccess
 uploads/drive/*
 !uploads/drive/.htaccess
 *.log

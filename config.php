@@ -217,12 +217,39 @@ function canViewTicket($ticket, $user)
 function sanitizeRichText($html)
 {
     if ($html === null || $html === '') return '';
-    $allowed = '<p><br><strong><b><em><i><u><s><ul><ol><li><a><blockquote><code><pre><h2><h3><h4><hr><span><div><table><thead><tbody><tr><th><td>';
+    $allowed = '<p><br><strong><b><em><i><u><s><ul><ol><li><a><blockquote><code><pre><h2><h3><h4><hr><span><div><figure><figcaption><img><table><thead><tbody><tr><th><td>';
     $html = strip_tags($html, $allowed);
     // Buang event handler seperti onclick=..., onerror=...
     $html = preg_replace('/\s+on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html);
     // Buang javascript:/data: URL pada href/src
     $html = preg_replace('/\s*(href|src)\s*=\s*("|\')\s*(javascript|data)\s*:.*?\2/i', ' $1="#"', $html);
+    // Gambar hanya boleh dari folder upload lokal; atribut lain dibuang.
+    $html = preg_replace_callback('/<img\b[^>]*>/i', function ($m) {
+        $tag = $m[0];
+        $attr = function ($name) use ($tag) {
+            if (preg_match('/\b' . preg_quote($name, '/') . '\s*=\s*("|\')(.*?)\1/is', $tag, $mm)) {
+                return html_entity_decode($mm[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
+            if (preg_match('/\b' . preg_quote($name, '/') . '\s*=\s*([^\s>"\']+)/i', $tag, $mm)) {
+                return $mm[1];
+            }
+            return null;
+        };
+        $src = $attr('src');
+        if ($src === null || !preg_match('#^(?:\./|/)?uploads/(?:editor|tickets|change_requests)/[A-Za-z0-9._-]+\.(?:jpe?g|png|gif|webp)$#i', $src)) {
+            return '';
+        }
+        $out = '<img src="' . e($src) . '"';
+        foreach (['alt', 'title'] as $name) {
+            $val = $attr($name);
+            if ($val !== null && $val !== '') $out .= ' ' . $name . '="' . e($val) . '"';
+        }
+        foreach (['width', 'height'] as $name) {
+            $val = $attr($name);
+            if ($val !== null && preg_match('/^\d{1,5}$/', $val)) $out .= ' ' . $name . '="' . $val . '"';
+        }
+        return $out . '>';
+    }, $html);
     return trim($html);
 }
 

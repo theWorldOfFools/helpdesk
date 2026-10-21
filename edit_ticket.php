@@ -163,6 +163,7 @@ $statuses = ['open', 'in_progress', 'resolved', 'closed'];
                     <?php endif; ?>
                 </div>
                 <textarea id="description" class="form-control" name="description" rows="10"><?php echo htmlspecialchars($ticket['description']); ?></textarea>
+                <div class="form-text">Bisa format bold, list, heading, link, dan gambar (maks 5MB).</div>
             </div>
             <div class="mb-0">
                 <label for="attachment" class="form-label">Lampiran <span class="text-secondary fw-normal">(kosongkan bila tidak diganti · maks 5MB)</span></label>
@@ -237,6 +238,7 @@ $statuses = ['open', 'in_progress', 'resolved', 'closed'];
 </form>
 
 <script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
+<script src="assets/js/ckeditor-image-upload.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.7/dist/notiflix-aio-3.2.7.min.js"></script>
 <script>
 (function () {
@@ -272,9 +274,10 @@ $statuses = ['open', 'in_progress', 'resolved', 'closed'];
         }
     }
     if (mentionBtn && mentionSel) mentionBtn.addEventListener('click', function () { if (mentionSel.value) insertAtCursor(mentionSel.value); });
-    if (window.ClassicEditor && desc) {
-        ClassicEditor.create(desc, { toolbar: ['heading', '|', 'bold', 'italic', 'underline', 'link', 'bulletedList', 'numberedList', 'blockQuote', 'code', '|', 'undo', 'redo'] })
-            .then(function (editor) { editorInstance = editor; }).catch(function () {});
+    if (window.createHelpdeskEditor && desc) {
+        window.createHelpdeskEditor(desc).then(function (editor) {
+            editorInstance = editor;
+        }).catch(function () { /* fallback ke textarea biasa */ });
     }
     if (form) {
         form.addEventListener('submit', function (e) {
