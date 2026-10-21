@@ -168,10 +168,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $keterangan = sanitizeRichText($old['keterangan']);
             if ($keterangan === '') $keterangan = htmlspecialchars($old['keterangan']);
-            // Pastikan keterangan tidak kosong setelah sanitasi
-            if (trim(strip_tags($keterangan)) === '' && trim($old['keterangan']) !== '') {
-                $keterangan = htmlspecialchars($old['keterangan']);
-            }
 
             pg_query($conn, 'BEGIN');
             pg_query($conn, 'LOCK TABLE change_requests IN SHARE ROW EXCLUSIVE MODE');

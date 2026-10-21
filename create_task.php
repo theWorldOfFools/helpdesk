@@ -136,9 +136,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $description = sanitizeRichText($old['description']);
         if ($description === '') $description = htmlspecialchars($old['description']);
-        if (trim(strip_tags($description)) === '' && trim($old['description']) !== '') {
-            $description = htmlspecialchars($old['description']);
-        }
 
         pg_query($conn, 'BEGIN');
         pg_query($conn, 'LOCK TABLE dev_tasks IN SHARE ROW EXCLUSIVE MODE');
@@ -231,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mb-0">
                     <label for="description" class="form-label">Deskripsi</label>
                     <textarea id="description" class="form-control" name="description" rows="8" placeholder="Lingkup pengerjaan, acceptance criteria, catatan teknis…"><?php echo htmlspecialchars($old['description']); ?></textarea>
-                    <div class="form-text">Bisa format bold, list, heading, dan link.</div>
+                    <div class="form-text">Bisa format bold, list, heading, link, dan gambar (maks 5MB).</div>
                 </div>
             </div></div>
         </div>
@@ -315,15 +312,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </form>
 
 <script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
+<script src="assets/js/ckeditor-image-upload.js"></script>
 <script>
 (function () {
     var desc = document.getElementById('description');
     var form = document.getElementById('taskForm');
     var editorInstance = null;
-    if (window.ClassicEditor && desc) {
-        ClassicEditor.create(desc, {
-            toolbar: ['heading', '|', 'bold', 'italic', 'underline', 'link', 'bulletedList', 'numberedList', 'blockQuote', 'code', '|', 'undo', 'redo']
-        }).then(function (editor) { editorInstance = editor; }).catch(function () {});
+    if (window.createHelpdeskEditor && desc) {
+        window.createHelpdeskEditor(desc).then(function (editor) { editorInstance = editor; }).catch(function () {});
     }
     if (form) {
         form.addEventListener('submit', function (e) {
