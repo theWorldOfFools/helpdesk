@@ -10,3 +10,6 @@ uploads/drive/*
 *.log
 .DS_Store
 vendor/
+# Aset editor di-host sendiri, jangan ikut terabaikan oleh aturan vendor/.
+!assets/vendor/
+!assets/vendor/**/*

@@ -166,8 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = $upError ?: 'Upload lampiran gagal.';
             $messageType = 'danger';
         } else {
-            $keterangan = sanitizeRichText($old['keterangan']);
-            if ($keterangan === '') $keterangan = htmlspecialchars($old['keterangan']);
+            $keterangan = prepareRichTextForStorage($old['keterangan'], $imgFailed);
 
             pg_query($conn, 'BEGIN');
             pg_query($conn, 'LOCK TABLE change_requests IN SHARE ROW EXCLUSIVE MODE');
@@ -220,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $tgCrTitle = $old['aplikasi'] . ' — ' . $old['fitur'];
                     $tgCrPrio = $old['priority'];
                     $tgBy = $user['name'];
-                    $message = 'Change Request ' . $crNumber . ' berhasil dibuat!' . ($upPath ? ' Lampiran ikut tersimpan.' : '');
+                    $message = 'Change Request ' . $crNumber . ' berhasil dibuat!' . ($upPath ? ' Lampiran ikut tersimpan.' : '') . ($imgFailed > 0 ? ' ' . $imgFailed . ' gambar gagal diimpor dari sumbernya.' : '');
                     $messageType = 'success';
                     $old = ['aplikasi' => '', 'unit' => '', 'modul' => '', 'fitur' => '', 'url' => '', 'waktu' => '', 'keterangan' => '', 'priority' => 'medium', 'report_for' => $user['id']];
                     $oldItems = [['jenis' => '', 'uraian' => '', 'alasan' => '']];
@@ -409,8 +408,8 @@ $todayMin = date('Y-m-d') . 'T00:00';
     </div>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
-<script src="assets/js/ckeditor-image-upload.js"></script>
+<script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+<script src="assets/js/helpdesk-markdown-editor.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.7/dist/notiflix-aio-3.2.7.min.js"></script>
 <script>
 (function () {
@@ -443,14 +442,14 @@ $todayMin = date('Y-m-d') . 'T00:00';
         form.addEventListener('submit', function (e) {
             var text = '';
             if (editorInstance) {
-                text = editorInstance.getData().replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+                text = editorInstance.getMarkdown().trim();
             } else if (ket) {
                 text = ket.value.trim();
             }
             if (!text) {
                 e.preventDefault();
                 if (window.Notiflix) Notiflix.Notify.warning('Keterangan wajib diisi — jelaskan kebutuhan perubahannya dulu ya.');
-                if (editorInstance) editorInstance.editing.view.focus();
+                if (editorInstance) editorInstance.focus();
                 else if (ket) ket.focus();
                 return;
             }

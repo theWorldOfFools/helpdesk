@@ -49,8 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $message = $upError ?: 'Upload lampiran gagal.';
             $messageType = 'danger';
         } else {
-            $description = sanitizeRichText($old['description']);
-            if ($description === '') $description = htmlspecialchars($old['description']);
+            $description = prepareRichTextForStorage($old['description'], $imgFailed);
 
             pg_query($conn, 'BEGIN');
             pg_query($conn, 'LOCK TABLE tickets IN SHARE ROW EXCLUSIVE MODE');
@@ -82,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newPrio = $old['priority'];
                 $newDiv = $old['division'];
                 $byName = $user['name'];
-                $message = 'Tiket ' . $ticketNumber . ' berhasil dibuat!' . ($upPath ? ' Lampiran ikut tersimpan.' : '');
+                $message = 'Tiket ' . $ticketNumber . ' berhasil dibuat!' . ($upPath ? ' Lampiran ikut tersimpan.' : '') . ($imgFailed > 0 ? ' ' . $imgFailed . ' gambar gagal diimpor dari sumbernya.' : '');
                 $messageType = 'success';
                 $old = ['title' => '', 'description' => '', 'category' => '', 'priority' => '', 'division' => '', 'report_for' => $user['id']];
                 tgNotifyEvent("🆕 <b>Tiket baru " . e($ticketNumber) . "</b> (" . e($newPrio) . ")\n" . e($newTitle) . "\n📍 " . e($newDiv) . " · 👤 " . e($byName));
@@ -224,8 +223,8 @@ $priorities = ['low', 'medium', 'high', 'critical'];
     </div>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
-<script src="assets/js/ckeditor-image-upload.js"></script>
+<script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+<script src="assets/js/helpdesk-markdown-editor.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.7/dist/notiflix-aio-3.2.7.min.js"></script>
 <script>
 (function () {
@@ -254,12 +253,7 @@ $priorities = ['low', 'medium', 'high', 'critical'];
 
     function insertAtCursor(text) {
         if (editorInstance) {
-            var model = editorInstance.model;
-            model.change(function (writer) {
-                var insertPos = model.document.selection.getFirstPosition();
-                writer.insertText(text + ' ', insertPos);
-            });
-            editorInstance.editing.view.focus();
+            editorInstance.insertText(text + ' ');
         } else if (desc) {
             var s = desc.selectionStart || desc.value.length;
             var e = desc.selectionEnd || s;
@@ -286,14 +280,14 @@ $priorities = ['low', 'medium', 'high', 'critical'];
         form.addEventListener('submit', function (e) {
             var text = '';
             if (editorInstance) {
-                text = editorInstance.getData().replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+                text = editorInstance.getMarkdown().trim();
             } else if (desc) {
                 text = desc.value.trim();
             }
             if (!text) {
                 e.preventDefault();
                 if (window.Notiflix) Notiflix.Notify.warning('Deskripsi wajib diisi — jelaskan masalahnya dulu ya.');
-                if (editorInstance) editorInstance.editing.view.focus();
+                if (editorInstance) editorInstance.focus();
                 else if (desc) desc.focus();
                 return;
             }

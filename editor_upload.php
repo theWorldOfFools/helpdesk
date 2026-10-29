@@ -1,5 +1,5 @@
 <?php
-// Endpoint upload gambar untuk CKEditor (deskripsi tiket / keterangan CR).
+// Endpoint upload gambar untuk editor markdown (deskripsi tiket / keterangan CR / todo).
 // Hanya menerima gambar, wajib login + CSRF, dan menyimpan ke uploads/editor/.
 require_once 'config.php';
 
@@ -54,18 +54,14 @@ if (!in_array($mime, $allowedMime, true)) {
     jsonResponse(['error' => ['message' => 'Tipe gambar tidak didukung.']], 415);
 }
 
-$dir = __DIR__ . '/uploads/editor';
-if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
-    jsonResponse(['error' => ['message' => 'Folder gambar tidak bisa dibuat.']], 500);
+$bytes = @file_get_contents($f['tmp_name']);
+if ($bytes === false) {
+    jsonResponse(['error' => ['message' => 'Gagal membaca file gambar.']], 500);
 }
 
-$ext = $typeToExt[$info[2]];
-$stored = date('Ym') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-$dest = $dir . '/' . $stored;
-
-if (!move_uploaded_file($f['tmp_name'], $dest)) {
-    jsonResponse(['error' => ['message' => 'Gagal menyimpan gambar.']], 500);
+$url = editor_store_image_bytes($bytes, $storeError);
+if (!$url) {
+    jsonResponse(['error' => ['message' => $storeError ?: 'Gagal menyimpan gambar.']], 500);
 }
-@chmod($dest, 0644);
 
-jsonResponse(['url' => 'uploads/editor/' . $stored]);
+jsonResponse(['url' => $url]);

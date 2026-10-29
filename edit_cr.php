@@ -248,8 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newOriginal = $upOriginal;
             }
 
-            $keterangan = sanitizeRichText($keteranganRaw);
-            if ($keterangan === '') $keterangan = htmlspecialchars($keteranganRaw);
+            $keterangan = prepareRichTextForStorage($keteranganRaw, $imgFailed);
 
             pg_query($conn, 'BEGIN');
             $upd = pg_query_params(
@@ -290,7 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($ok) {
                 pg_query($conn, 'COMMIT');
-                $message = 'Change Request berhasil diperbarui!';
+                $message = 'Change Request berhasil diperbarui!' . ($imgFailed > 0 ? ' ' . $imgFailed . ' gambar gagal diimpor dari sumbernya.' : '');
                 $messageType = 'success';
                 $r2 = pg_query_params($conn, "SELECT * FROM change_requests WHERE id = $1", [$id]);
                 $cr = pg_fetch_assoc($r2);
@@ -481,8 +480,8 @@ $todayMin = date('Y-m-d') . 'T00:00';
     </div>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
-<script src="assets/js/ckeditor-image-upload.js"></script>
+<script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+<script src="assets/js/helpdesk-markdown-editor.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.7/dist/notiflix-aio-3.2.7.min.js"></script>
 <script>
 (function () {
@@ -513,14 +512,14 @@ $todayMin = date('Y-m-d') . 'T00:00';
         form.addEventListener('submit', function (e) {
             var text = '';
             if (editorInstance) {
-                text = editorInstance.getData().replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+                text = editorInstance.getMarkdown().trim();
             } else if (ket) {
                 text = ket.value.trim();
             }
             if (!text) {
                 e.preventDefault();
                 if (window.Notiflix) Notiflix.Notify.warning('Keterangan wajib diisi.');
-                if (editorInstance) editorInstance.editing.view.focus();
+                if (editorInstance) editorInstance.focus();
                 else if (ket) ket.focus();
                 return;
             }

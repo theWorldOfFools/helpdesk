@@ -12,6 +12,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 require_once __DIR__ . '/includes/csrf.php';
+require_once __DIR__ . '/includes/editor_images.php';
 
 // Auto-login remember-me sentral: berlaku di SEMUA halaman (sekali per session).
 function tryRememberLogin()
@@ -217,12 +218,36 @@ function canViewTicket($ticket, $user)
 function sanitizeRichText($html)
 {
     if ($html === null || $html === '') return '';
-    $allowed = '<p><br><strong><b><em><i><u><s><ul><ol><li><a><blockquote><code><pre><h2><h3><h4><hr><span><div><figure><figcaption><img><table><thead><tbody><tr><th><td>';
+    $allowed = '<p><br><strong><b><em><i><u><s><del><ul><ol><li><a><blockquote><code><pre><h1><h2><h3><h4><h5><h6><hr><span><div><figure><figcaption><img><table><colgroup><col><thead><tbody><tr><th><td>';
     $html = strip_tags($html, $allowed);
-    // Buang event handler seperti onclick=..., onerror=...
-    $html = preg_replace('/\s+on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html);
-    // Buang javascript:/data: URL pada href/src
-    $html = preg_replace('/\s*(href|src)\s*=\s*("|\')\s*(javascript|data)\s*:.*?\2/i', ' $1="#"', $html);
+    // Bersihkan atribut di dalam tag saja, supaya teks/kode yang kebetulan
+    // memuat "onclick=" tidak ikut terhapus.
+    $html = preg_replace_callback('/<[a-z][^>]*>/i', function ($m) {
+        $tag = $m[0];
+
+        // Buang event handler seperti onclick=..., onerror=...
+        // Pemisah bisa spasi atau '/' (quirk parser HTML), dan bisa menempel
+        // langsung setelah tanda kutip atribut sebelumnya.
+        $tag = preg_replace('/[\s\/]+on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $tag);
+        $tag = preg_replace_callback('/(["\'])\s*on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', function ($mm) {
+            return $mm[1];
+        }, $tag);
+
+        // Buang URL berbahaya pada href/src, termasuk yang tanpa kutip atau memakai entity.
+        return preg_replace_callback(
+            '/(?:[\s\/]+|(?<=["\']))(href|src|formaction|xlink:href)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s>]+))/i',
+            function ($am) {
+                $value = ($am[2] ?? '') . ($am[3] ?? '') . ($am[4] ?? '');
+                $decoded = html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $decoded = preg_replace('/[\x00-\x20]+/', '', $decoded);
+                if (preg_match('/^(?:javascript|data|vbscript)\s*:/i', $decoded)) {
+                    return ' ' . $am[1] . '="#"';
+                }
+                return $am[0];
+            },
+            $tag
+        );
+    }, $html);
     // Gambar hanya boleh dari folder upload lokal; atribut lain dibuang.
     $html = preg_replace_callback('/<img\b[^>]*>/i', function ($m) {
         $tag = $m[0];

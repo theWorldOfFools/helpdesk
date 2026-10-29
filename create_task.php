@@ -134,8 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = $err;
         $messageType = 'danger';
     } else {
-        $description = sanitizeRichText($old['description']);
-        if ($description === '') $description = htmlspecialchars($old['description']);
+        $description = prepareRichTextForStorage($old['description'], $imgFailed);
 
         pg_query($conn, 'BEGIN');
         pg_query($conn, 'LOCK TABLE dev_tasks IN SHARE ROW EXCLUSIVE MODE');
@@ -172,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     foreach ($postedAssignees as $aid) {
                         notifyUser($conn, $aid, 'Todo baru ' . $taskCode . ' menugaskan Anda', $user['name'] . ': ' . $old['title'], 'view_task.php?id=' . $createdId);
                     }
-                    $message = 'Todo ' . $taskCode . ' berhasil dibuat! Kamu otomatis jadi owner-nya.'
+                    $message = 'Todo ' . $taskCode . ' berhasil dibuat! Kamu otomatis jadi owner-nya.' . ($imgFailed > 0 ? ' ' . $imgFailed . ' gambar gagal diimpor dari sumbernya.' : '')
                         . (!empty($postedAssignees) ? ' (' . count($postedAssignees) . ' assignee lain ditugaskan)' : '')
                         . (!empty($savedPaths) ? ' (' . count($savedPaths) . ' lampiran tersimpan)' : '');
                     $messageType = 'success';
@@ -311,8 +310,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
-<script src="assets/js/ckeditor-image-upload.js"></script>
+<script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+<script src="assets/js/helpdesk-markdown-editor.js"></script>
 <script>
 (function () {
     var desc = document.getElementById('description');
@@ -324,7 +323,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (form) {
         form.addEventListener('submit', function (e) {
             var text = editorInstance
-                ? editorInstance.getData().replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim()
+                ? editorInstance.getMarkdown().trim()
                 : desc.value.trim();
             if (!text || !document.getElementById('title').value.trim()) {
                 e.preventDefault();

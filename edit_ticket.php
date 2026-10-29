@@ -93,8 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $newOriginal = $upOriginal;
             }
 
-            $description = sanitizeRichText($descriptionRaw);
-            if ($description === '') $description = htmlspecialchars($descriptionRaw);
+            $description = prepareRichTextForStorage($descriptionRaw, $imgFailed);
 
             $upd = pg_query_params(
                 $conn,
@@ -103,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
             if ($upd) {
-                $message = 'Tiket berhasil diperbarui!';
+                $message = 'Tiket berhasil diperbarui!' . ($imgFailed > 0 ? ' ' . $imgFailed . ' gambar gagal diimpor dari sumbernya.' : '');
                 $messageType = 'success';
                 $r2 = pg_query_params($conn, "SELECT * FROM tickets WHERE id = $1", [$id]);
                 $ticket = pg_fetch_assoc($r2);
@@ -237,8 +236,8 @@ $statuses = ['open', 'in_progress', 'resolved', 'closed'];
     </div>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
-<script src="assets/js/ckeditor-image-upload.js"></script>
+<script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+<script src="assets/js/helpdesk-markdown-editor.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/notiflix@3.2.7/dist/notiflix-aio-3.2.7.min.js"></script>
 <script>
 (function () {
@@ -264,9 +263,7 @@ $statuses = ['open', 'in_progress', 'resolved', 'closed'];
     var mentionSel = document.getElementById('mentionUser');
     function insertAtCursor(text) {
         if (editorInstance) {
-            var model = editorInstance.model;
-            model.change(function (writer) { writer.insertText(text + ' ', model.document.selection.getFirstPosition()); });
-            editorInstance.editing.view.focus();
+            editorInstance.insertText(text + ' ');
         } else if (desc) {
             var s = desc.selectionStart || desc.value.length, e = desc.selectionEnd || s;
             desc.value = desc.value.slice(0, s) + text + ' ' + desc.value.slice(e);
@@ -283,14 +280,14 @@ $statuses = ['open', 'in_progress', 'resolved', 'closed'];
         form.addEventListener('submit', function (e) {
             var text = '';
             if (editorInstance) {
-                text = editorInstance.getData().replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+                text = editorInstance.getMarkdown().trim();
             } else if (desc) {
                 text = desc.value.trim();
             }
             if (!text) {
                 e.preventDefault();
                 if (window.Notiflix) Notiflix.Notify.warning('Deskripsi wajib diisi.');
-                if (editorInstance) editorInstance.editing.view.focus();
+                if (editorInstance) editorInstance.focus();
                 else if (desc) desc.focus();
                 return;
             }

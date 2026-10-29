@@ -171,8 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $task['estimate_hours'] = $estimate;
         $currentAssigneeIds = $postedAssigneeIds;
     } else {
-        $description = sanitizeRichText($descRaw);
-        if ($description === '') $description = htmlspecialchars($descRaw);
+        $description = prepareRichTextForStorage($descRaw, $imgFailed);
         $doneAt = $task['done_at'];
         if ($phase === 'done' && $task['phase'] !== 'done') $doneAt = date('Y-m-d H:i:s');
         elseif ($phase !== 'done' && $task['phase'] === 'done') $doneAt = null;
@@ -208,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($newOnes as $nid) {
                 if ($nid !== (int)$user['id']) notifyUser($conn, $nid, 'Todo ' . $task['task_code'] . ' menugaskan Anda', $user['name'] . ': ' . $title, 'view_task.php?id=' . $id);
             }
-            $message = 'Todo berhasil diperbarui!';
+            $message = 'Todo berhasil diperbarui!' . ($imgFailed > 0 ? ' ' . $imgFailed . ' gambar gagal diimpor dari sumbernya.' : '');
             $messageType = 'success';
             $r2 = pg_query_params($conn, "SELECT * FROM dev_tasks WHERE id = $1", [$id]);
             $task = pg_fetch_assoc($r2);
@@ -249,6 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="mb-0">
                     <label for="description" class="form-label">Deskripsi</label>
                     <textarea id="description" class="form-control" name="description" rows="8"><?php echo htmlspecialchars($task['description']); ?></textarea>
+                    <div class="form-text">Bisa format bold, list, heading, link, dan gambar (maks 5MB).</div>
                 </div>
             </div></div>
         </div>
@@ -343,14 +343,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </form>
 
-<script src="https://cdn.jsdelivr.net/npm/@ckeditor/ckeditor5-build-classic@39.0.2/build/ckeditor.js"></script>
+<script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+<script src="assets/js/helpdesk-markdown-editor.js"></script>
 <script>
 (function () {
     var desc = document.getElementById('description');
-    if (window.ClassicEditor && desc) {
-        ClassicEditor.create(desc, {
-            toolbar: ['heading', '|', 'bold', 'italic', 'underline', 'link', 'bulletedList', 'numberedList', 'blockQuote', 'code', '|', 'undo', 'redo']
-        }).catch(function () {});
+    if (window.createHelpdeskEditor && desc) {
+        window.createHelpdeskEditor(desc).catch(function () {});
     }
 })();
 </script>
