@@ -10,6 +10,7 @@ Sistem tiket online untuk mencatat dan memantau operasional divisi IT dengan sis
 - Prioritas tiket (Low, Medium, High, Critical)
 - Dashboard monitoring real-time
 - Drive & Dokumen internal (folder hierarkis + sharing privat/divisi/publik, ala Google Drive)
+- Undangan rapat digital: QR share, form peserta publik, absensi, dan notulensi kolaboratif
 - Sistem RBAC dengan 3 role: Administrator, Teknisi, Pelapor
 - Autentikasi login dengan session management
 - Filter dan pencarian tiket
@@ -31,6 +32,8 @@ Sistem tiket online untuk mencatat dan memantau operasional divisi IT dengan sis
 | Drive: Buat Folder/File | ✅ | ✅ | ✅ (Private/divisi own) |
 | Drive: Folder Publik (SOP) | ✅ | ✅ | ❌ (Lihat saja) |
 | Drive: Share ke User | ✅ | ✅ (view; edit perlu owner) | ✅ (folder own) |
+| Buat/Kelola Rapat | ✅ (semua rapat) | ✅ (rapat yang dibuatnya) | ❌ |
+| Notulensi Rapat | ✅ (semua rapat) | ✅ (host) | ✅ (peserta terdaftar via token) |
 
 ## Arsitektur
 
@@ -122,10 +125,11 @@ psql -U postgres -d helpdesk_db -f migrations/019_dev_task_attachments.sql
 psql -U postgres -d helpdesk_db -f migrations/020_drive.sql
 psql -U postgres -d helpdesk_db -f migrations/021_telegram.sql
 psql -U postgres -d helpdesk_db -f migrations/022_kb_shares.sql
+psql -U postgres -d helpdesk_db -f migrations/023_meetings.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→022 dari schema kosong.
-> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020`, `021`, `022` idempoten (`IF NOT EXISTS`) sehingga aman
+> Catatan: migrasi wajib dijalankan berurutan 001→023 dari schema kosong.
+> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020`, `021`, `022`, `023` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
 > `uploads/change_requests/` writable.
@@ -191,6 +195,15 @@ helpdesk/
 ├── oncall.php              # Jadwal Oncall bulanan + import XLS/PNG (preview) + rotasi otomatis (kelola: admin, lihat: semua)
 ├── oncall_action.php       # Backend oncall: tambah/ubah/hapus/import/rotasi (admin, POST+CSRF)
 ├── oncall_template.php     # Download template XLS import oncall (Nama | Nomor tanggal)
+├── meetings.php            # Daftar rapat internal + filter (admin/teknisi)
+├── create_meeting.php      # Buat undangan rapat + QR otomatis
+├── edit_meeting.php        # Edit rapat + hapus permanen (admin)
+├── view_meeting.php        # Detail rapat: QR, absensi, notulensi, kontrol host
+├── meeting_action.php      # Backend aksi rapat (status/link/absensi/notulensi, POST+CSRF)
+├── meeting_print.php       # Undangan siap cetak / simpan PDF (A5)
+├── meeting_export.php      # Export CSV absensi peserta
+├── meeting_invite.php      # Halaman undangan publik + form peserta (tanpa login)
+├── meeting_room.php        # Ruang notulensi peserta via token pribadi (tanpa login)
 ├── profile.php             # Profil + ganti password (semua role)
 ├── kb.php                  # Basis solusi (semua role)
 ├── kb_manage.php           # Kelola artikel + template jawaban (admin/teknisi)
@@ -222,26 +235,32 @@ helpdesk/
 │   ├── 011_change_requests.sql  # change_requests + items + history (header + rincian CR)
 │   ├── 012_change_request_comments.sql # change_request_comments (diskusi CR)
 │   ├── 013_simrs_auth.sql       # auth_source/external_id/jabatan/unit_kerja (login SIMRS)
-│   └── 014_divisions.sql        # master divisi + seed dari daftar lama & data existing
+│   ├── 014_divisions.sql        # master divisi + seed dari daftar lama & data existing
 │   ├── 015_oncall_schedules.sql # jadwal oncall: tanggal + user (Minggu/libur boleh 2 orang)
 │   ├── 016_change_request_pics.sql # multi-PIC CR (many-to-many, sinkron assigned_to)
 │   ├── 017_dev_tasks.sql        # mini-todo SDLC internal + comments + history
 │   ├── 018_dev_task_assignees.sql # assignee multi-person todo
 │   ├── 019_dev_task_attachments.sql # multi-lampiran todo (10 file, 20MB)
-│   └── 020_drive.sql            # drive_folders + drive_files + drive_shares (IDEMPOTEN)
+│   ├── 020_drive.sql            # drive_folders + drive_files + drive_shares (IDEMPOTEN)
+│   ├── 021_telegram.sql         # integrasi notifikasi Telegram
+│   ├── 022_kb_shares.sql        # share artikel KB publik via token
+│   └── 023_meetings.sql         # meetings + meeting_attendees + meeting_notes (IDEMPOTEN)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
 │   ├── drive_auth.php      # Helper Drive: canView/canEdit warisan + kuota + multi-upload
 │   ├── simrs_auth.php      # Helper SIMRS: koneksi read-only, verify HMAC+bcrypt, profil pegawai
 │   ├── cr_auth.php         # Helper CR: generateCrNumber/canViewCr/canActOnCr/upload
+│   ├── meeting_auth.php    # Helper rapat: token/URL, status, hak host/admin, query peserta & notulensi
 │   ├── csrf.php            # CSRF token/verify
 │   ├── env.php             # Loader .env minimal
 │   ├── header.php          # Template + DataTables/Chart.js CDN
 │   └── footer.php          # Template + datatables-grids.js/dashboard-charts.js/reports.js
 ├── assets/
 │   ├── css/style.css
+│   ├── vendor/qrcodejs/qrcode.min.js # Library QR lokal (tanpa CDN)
 │   └── js/
 │       ├── script.js
+│       ├── meeting-qr.js         # Render QR + salin link + share + download PNG
 │       ├── datatables-grids.js   # DataTables tiket/users/divisi/workload
 │       ├── dashboard-charts.js  # Chart.js + leaderboard fetch
 │       └── reports.js           # Menu laporan fetch + analisa
@@ -289,8 +308,31 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - Change Request end-to-end (terpisah dari tiket): buat + tabel dinamis Jenis Perubahan (Penambahan/Perubahan/Design, 1–20 baris), daftar + API server-side, detail + tindak lanjut + diskusi/riwayat, edit/hapus admin, nomor CR-YYYYMM-XXXX anti-race, SLA jam kerja, notifikasi, widget dashboard + laporan + export
 - Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, profil/password ikut SIMRS
 - Drive & Dokumen internal (`drive.php` + `drive_action.php` + `drive_download.php`, migrasi `020_drive.sql`): folder hierarkis maks 5 level + subfolder, upload multi-file (10 file/request, 50MB/file, 500MB/user), preview gambar/PDF, pencarian global, sharing privat/divisi/publik + share per-user (view/edit, menurun ke subfolder), download aman via cek hak, notifikasi saat di-share, audit `activity_log`
+- Undangan Rapat Digital (`meetings.php` + `meeting_invite.php` + `meeting_room.php`, migrasi `023_meetings.sql`): buat rapat (admin/teknisi, host = pembuat), QR + link undangan yang bisa diacak/dinonaktifkan, form peserta publik tanpa login (nama/instalasi/bagian/ruangan wajib), absensi + export CSV, notulensi feed kolaboratif host + peserta via token pribadi, kunci registrasi/notulensi terpisah, undangan cetak/PDF A5, library QR lokal tanpa CDN
 - **Perbaikan bug (18 Okt 2026):** share Drive `view` kini benar-benar read-only — hak share paling spesifik menang (share `view` di folder mengalahkan `edit` warisan) dan share `view` eksplisit mengikat semua penerima, termasuk admin. Detail + screenshot: [`docs/drive-share-view-only-fix.md`](docs/drive-share-view-only-fix.md)
 - Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
+
+### Undangan Rapat Digital (QR + Absensi + Notulensi)
+
+**Membuat rapat (admin/teknisi):** buka menu **Rapat → Buat Rapat**. Isi judul, agenda, tanggal/jam mulai, estimasi durasi, lokasi, dan link online opsional. Sistem membuat kode `MTG-YYYYMM-XXXX`, QR, dan link undangan. Host (pembuat rapat) atau admin dapat mengedit, mencetak undangan, mengunduh QR, menyalin/membagikan link, serta mengelola absensi dan notulensi. Teknisi non-host hanya dapat melihat detail dasar.
+
+**Peserta (tanpa login):** scan QR atau buka `meeting_invite.php?t=…`, lalu isi **nama, instalasi, bagian, dan ruangan** (jabatan & no. HP opsional). Setelah terdaftar, peserta diarahkan ke `meeting_room.php?p=…`, yaitu link pribadi untuk membaca dan menulis notulensi. Link ini bersifat rahasia dan tidak dapat dipulihkan dari halaman publik, jadi minta peserta menyimpannya.
+
+**Kontrol host/admin di halaman detail rapat:**
+
+- **QR & link undangan** — salin, bagikan, unduh PNG, cetak/PDF A5, nonaktifkan/aktifkan kembali, atau acak token (QR/link lama langsung tidak berlaku).
+- **Registrasi peserta** — buka/tutup form pendaftaran tanpa mengubah jadwal rapat.
+- **Absensi** — ubah status peserta (Terdaftar/Hadir/Tidak Hadir), hapus peserta, cari berdasarkan nama/instalasi/bagian/ruangan, dan export CSV.
+- **Notulensi** — feed catatan dari host/admin dan peserta terdaftar; host bisa menambah/menghapus catatan, mengunci notulensi peserta, dan menandai rapat selesai/dibatalkan/dibuka kembali.
+- **Hapus permanen** — hanya admin, menghapus rapat beserta peserta dan notulensinya.
+
+Halaman publik memakai `noindex, nofollow`, CSRF + honeypot pada form, dan notulensi peserta tidak dapat mengimpor gambar remote. QR dirender oleh library lokal `assets/vendor/qrcodejs/` sehingga tetap berfungsi tanpa akses CDN.
+
+Migrasi:
+
+```bash
+psql -U postgres -d helpdesk_db -f migrations/023_meetings.sql
+```
 
 ### Menambah Pengguna Baru
 

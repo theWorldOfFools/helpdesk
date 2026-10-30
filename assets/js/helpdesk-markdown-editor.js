@@ -75,6 +75,15 @@
             var rows = parseInt(element.getAttribute('rows') || '8', 10);
             if (!rows || rows < 4) rows = 8;
             var height = opts.height || (Math.max(260, rows * 32) + 'px');
+            var allowImage = opts.allowImage !== false;
+            var toolbarItems = opts.toolbarItems || DEFAULT_TOOLBAR;
+            if (!allowImage) {
+                // Halaman publik tidak boleh menawarkan upload gambar; hook upload
+                // juga dimatikan agar paste gambar tidak memanggil endpoint login.
+                toolbarItems = toolbarItems.map(function (group) {
+                    return group.filter(function (item) { return item !== 'image'; });
+                }).filter(function (group) { return group.length > 0; });
+            }
 
             var host = document.createElement('div');
             host.className = 'helpdesk-md-editor';
@@ -91,10 +100,10 @@
                     placeholder: element.getAttribute('placeholder') || '',
                     usageStatistics: false,
                     hideModeSwitch: false,
-                    toolbarItems: opts.toolbarItems || DEFAULT_TOOLBAR,
-                    hooks: {
+                    toolbarItems: toolbarItems,
+                    hooks: allowImage ? {
                         addImageBlobHook: uploadImageBlob
-                    }
+                    } : {}
                 });
 
                 // Data lama tersimpan sebagai HTML. setHTML juga mengonversinya
