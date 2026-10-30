@@ -213,21 +213,177 @@ function canViewTicket($ticket, $user)
     return false;
 }
 
-// Sanitasi HTML dari rich-text editor: hanya tag aman yang dipertahankan,
-// event handler (on*) dan javascript: URL dibuang.
+// Sanitasi HTML dari rich-text editor. Memakai DOM parser agar tag selalu
+// seimbang: paste yang memuat <div> tak tertutup tidak bisa lagi menelan
+// struktur card/kolom halaman. Hanya tag dan atribut aman yang dipertahankan;
+// style/class/id dibuang karena bisa menimpa CSS halaman.
 function sanitizeRichText($html)
 {
     if ($html === null || $html === '') return '';
+    $html = (string)$html;
+    if (trim($html) === '') return '';
+
+    if (class_exists('DOMDocument')) {
+        $clean = sanitizeRichTextDom($html);
+        if ($clean !== null) return $clean;
+    }
+    return sanitizeRichTextFallback($html);
+}
+
+function sanitizeRichTextDom($html)
+{
+    // Tag yang diizinkan => atribut yang boleh dipertahankan.
+    $allowed = [
+        'p' => [], 'br' => [], 'strong' => [], 'b' => [], 'em' => [], 'i' => [],
+        'u' => [], 's' => [], 'del' => [], 'ul' => [], 'ol' => ['start'], 'li' => [],
+        'a' => ['href', 'title'], 'blockquote' => [], 'code' => [], 'pre' => [],
+        'h1' => [], 'h2' => [], 'h3' => [], 'h4' => [], 'h5' => [], 'h6' => [],
+        'hr' => [], 'span' => [], 'div' => [], 'figure' => [], 'figcaption' => [],
+        'img' => ['src', 'alt', 'title'], 'table' => [], 'colgroup' => [], 'col' => [],
+        'thead' => [], 'tbody' => [], 'tr' => [],
+        'th' => ['colspan', 'rowspan'], 'td' => ['colspan', 'rowspan'],
+    ];
+    // Tag berbahaya: dibuang beserta isinya.
+    $drop = array_fill_keys([
+        'script', 'style', 'iframe', 'object', 'embed', 'applet', 'form', 'input',
+        'button', 'select', 'textarea', 'option', 'link', 'meta', 'base', 'svg',
+        'math', 'template', 'noscript', 'video', 'audio', 'source', 'canvas',
+        'title', 'head',
+    ], true);
+
+    // Tag penutup body/html dari paste halaman penuh tidak boleh memotong
+    // konten, jadi dibuang sebelum parsing.
+    $html = preg_replace('#</(?:body|html)\s*>#i', '', $html);
+    // Libxml menyarangkan <li> berikutnya bila ada <li> kosong. Item kosong
+    // tidak berguna, jadi dibuang lebih dulu.
+    $html = preg_replace('#<li\b[^>]*>(?:\s|&nbsp;)*</li>#i', '', $html);
+
+    $doc = new DOMDocument('1.0', 'UTF-8');
+    $prev = libxml_use_internal_errors(true);
+    $ok = $doc->loadHTML(
+        '<?xml encoding="UTF-8"><html><body>' . $html . '</body></html>',
+        LIBXML_HTML_NODEFDTD
+    );
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    if (!$ok) return null;
+
+    $body = $doc->getElementsByTagName('body')->item(0);
+    if (!$body) return null;
+
+    sanitizeRichTextChildren($body, $allowed, $drop);
+
+    $out = '';
+    foreach ($body->childNodes as $child) {
+        $out .= $doc->saveHTML($child);
+    }
+    return trim($out);
+}
+
+function sanitizeRichTextChildren(DOMNode $node, array $allowed, array $drop)
+{
+    $children = [];
+    foreach ($node->childNodes as $child) $children[] = $child;
+
+    foreach ($children as $child) {
+        if ($child->nodeType === XML_COMMENT_NODE) {
+            $node->removeChild($child);
+            continue;
+        }
+        if ($child->nodeType === XML_TEXT_NODE || $child->nodeType === XML_CDATA_SECTION_NODE) {
+            continue;
+        }
+        if ($child->nodeType !== XML_ELEMENT_NODE) {
+            $node->removeChild($child);
+            continue;
+        }
+
+        $tag = strtolower($child->nodeName);
+        if (isset($drop[$tag])) {
+            $node->removeChild($child);
+            continue;
+        }
+
+        // Bersihkan isi dulu, baru atribut tag ini.
+        sanitizeRichTextChildren($child, $allowed, $drop);
+
+        // List kosong (sisa item kosong) tidak perlu ditampilkan.
+        if (($tag === 'ul' || $tag === 'ol')
+            && trim($child->textContent) === ''
+            && $child->getElementsByTagName('img')->length === 0) {
+            $node->removeChild($child);
+            continue;
+        }
+
+        if (isset($allowed[$tag])) {
+            sanitizeRichTextAttributes($child, $tag, $allowed[$tag]);
+            if ($tag === 'img' && !$child->hasAttribute('src')) {
+                $node->removeChild($child);
+            }
+            continue;
+        }
+
+        // Tag tidak dikenal: buang tag, pertahankan isinya yang sudah bersih.
+        while ($child->firstChild) {
+            $node->insertBefore($child->firstChild, $child);
+        }
+        $node->removeChild($child);
+    }
+}
+
+function sanitizeRichTextAttributes(DOMElement $el, $tag, array $allowed)
+{
+    $names = [];
+    foreach ($el->attributes as $attr) $names[] = $attr->name;
+
+    foreach ($names as $name) {
+        $lower = strtolower($name);
+        if (!in_array($lower, $allowed, true)) {
+            $el->removeAttribute($name);
+            continue;
+        }
+
+        $value = $el->getAttribute($name);
+
+        if ($lower === 'href') {
+            $trimmed = trim($value);
+            $compact = preg_replace('/[\x00-\x20]+/', '', html_entity_decode($trimmed, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            if ($trimmed === '' || preg_match('/^(?:javascript|data|vbscript):/i', $compact)) {
+                $el->removeAttribute($name);
+            }
+            continue;
+        }
+
+        if ($lower === 'src') {
+            $trimmed = trim($value);
+            if (!preg_match('#^(?:\./|/)?uploads/(?:editor|tickets|change_requests)/[A-Za-z0-9._-]+\.(?:jpe?g|png|gif|webp)$#i', $trimmed)) {
+                $el->removeAttribute($name);
+            }
+            continue;
+        }
+
+        if (in_array($lower, ['colspan', 'rowspan', 'start'], true)) {
+            $trimmed = trim($value);
+            if (!preg_match('/^\d{1,4}$/', $trimmed) || (int)$trimmed < 1) {
+                $el->removeAttribute($name);
+            }
+        }
+    }
+}
+
+// Fallback bila ekstensi DOM tidak tersedia. Tag tidak bisa diseimbangkan,
+// tetapi atribut berisiko tetap dibuang.
+function sanitizeRichTextFallback($html)
+{
     $allowed = '<p><br><strong><b><em><i><u><s><del><ul><ol><li><a><blockquote><code><pre><h1><h2><h3><h4><h5><h6><hr><span><div><figure><figcaption><img><table><colgroup><col><thead><tbody><tr><th><td>';
     $html = strip_tags($html, $allowed);
-    // Bersihkan atribut di dalam tag saja, supaya teks/kode yang kebetulan
-    // memuat "onclick=" tidak ikut terhapus.
     $html = preg_replace_callback('/<[a-z][^>]*>/i', function ($m) {
         $tag = $m[0];
 
+        // Buang atribut yang bisa menimpa CSS halaman.
+        $tag = preg_replace('/\s+(?:style|class|id|contenteditable|data-[\w-]+)\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $tag);
+
         // Buang event handler seperti onclick=..., onerror=...
-        // Pemisah bisa spasi atau '/' (quirk parser HTML), dan bisa menempel
-        // langsung setelah tanda kutip atribut sebelumnya.
         $tag = preg_replace('/[\s\/]+on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $tag);
         $tag = preg_replace_callback('/(["\'])\s*on\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', function ($mm) {
             return $mm[1];
