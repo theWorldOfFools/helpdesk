@@ -30,7 +30,7 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <?php
-    $richEditorPages = ['create_ticket.php', 'edit_ticket.php', 'create_cr.php', 'edit_cr.php', 'create_task.php', 'edit_task.php', 'create_meeting.php', 'edit_meeting.php', 'view_meeting.php', 'announcements.php'];
+    $richEditorPages = ['create_ticket.php', 'edit_ticket.php', 'create_cr.php', 'edit_cr.php', 'create_task.php', 'edit_task.php', 'create_meeting.php', 'edit_meeting.php', 'view_meeting.php', 'announcements.php', 'view_ticket.php', 'view_cr.php', 'view_task.php'];
     if (!empty($currentUser) && in_array($activePage, $richEditorPages, true)):
     ?>
     <link rel="stylesheet" href="assets/vendor/toastui/toastui-editor.min.css">

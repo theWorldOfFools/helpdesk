@@ -261,7 +261,7 @@ $od = isTaskOverdue($task);
 </div>
 
 <div class="modal fade" id="actionModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <form method="POST" action="task_action.php" class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="actionModalLabel">Tindak Lanjut</h5>
@@ -274,7 +274,8 @@ $od = isTaskOverdue($task);
         <p class="small mb-1"><span id="actionDesc" class="text-secondary"></span></p>
         <p class="small mb-2">Fase saat ini: <span class="badge <?php echo $phaseBadge[$task['phase']]; ?>"><?php echo e($task['phase']); ?></span> → Tujuan: <strong id="actionTo">-</strong></p>
         <label for="noteInput" class="form-label">Catatan wajib <span class="text-secondary">(min 10 karakter)</span></label>
-        <textarea name="note" id="noteInput" class="form-control" rows="4" required minlength="10" placeholder="Tulis progres / hasil testing / langkah berikutnya…"></textarea>
+        <div class="form-text mb-1">Mendukung markdown dan gambar — tempel gambar (Ctrl+V) atau klik ikon gambar di toolbar.</div>
+        <textarea name="note" id="noteInput" class="form-control" rows="4" placeholder="Tulis progres / hasil testing / langkah berikutnya…"></textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>

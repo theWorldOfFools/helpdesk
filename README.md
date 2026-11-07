@@ -305,6 +305,7 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - Menu Laporan eksekutif: KPI, analisa otomatis, tren, SLA respons/resolusi, breach list, kelola hari libur, export CSV/XLSX/PDF
 - Modul akun: profil + ganti password, remember-me fungsional, wajib ganti password default, reset oleh admin, log aktivitas
 - Knowledge base: artikel solusi + template jawaban sekali klik di modal tindak lanjut
+- Komentar & catatan tindak lanjut tiket/CR/todo mendukung markdown + gambar (tempel atau unggah lewat toolbar; gambar tersimpan di `uploads/editor/`)
 - Basis Solusi — Bagikan publik: admin/teknisi bisa membuat link token per artikel (`kb_share.php?token=…`) yang bisa dibaca tanpa login (hanya-lihat, `noindex`, permanen sampai dicabut; migrasi `022_kb_shares.sql`)
 - Target SLA & respons jadi setting DB (diubah admin via menu Laporan, tanpa coding)
 - Notifikasi in-app: bell + halaman, terpicu saat tiket dibuat/diubah

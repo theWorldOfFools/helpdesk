@@ -235,7 +235,7 @@ if ($tr) {
 </div>
 
 <div class="modal fade" id="actionModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <form method="POST" action="ticket_action.php" class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="actionModalLabel">Tindak Lanjut</h5>
@@ -248,6 +248,7 @@ if ($tr) {
         <p class="small mb-1"><span id="actionDesc" class="text-secondary"></span></p>
         <p class="small mb-2">Status saat ini: <span class="status-badge status-<?php echo $ticket['status']; ?>"><?php echo e($ticket['status']); ?></span> → Tujuan: <strong id="actionTo">-</strong></p>
         <label for="noteInput" class="form-label">Catatan wajib <span class="text-secondary">(min 10 karakter)</span></label>
+        <div class="form-text mb-1">Mendukung markdown dan gambar — tempel gambar (Ctrl+V) atau klik ikon gambar di toolbar.</div>
         <?php if (!empty($templates)): ?>
         <div class="input-group mb-2">
             <select id="tplSelect" class="form-select form-select-sm" aria-label="Sisipkan template jawaban">
@@ -257,7 +258,7 @@ if ($tr) {
             <button type="button" class="btn btn-sm btn-outline-secondary" id="tplBtn">Sisipkan</button>
         </div>
         <?php endif; ?>
-        <textarea name="note" id="noteInput" class="form-control" rows="4" required minlength="10" placeholder="Tulis apa yang dikerjakan / hasil pengecekan / langkah berikutnya…"></textarea>
+        <textarea name="note" id="noteInput" class="form-control" rows="4" placeholder="Tulis apa yang dikerjakan / hasil pengecekan / langkah berikutnya…"></textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
@@ -279,17 +280,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('actionTo').textContent = btn.getAttribute('data-to') || '-';
     document.getElementById('actionDesc').textContent = btn.getAttribute('data-desc') || '';
   });
-  var sel = document.getElementById('tplSelect');
-  var btn = document.getElementById('tplBtn');
-  var note = document.getElementById('noteInput');
-  if (sel && btn && note) {
-    btn.addEventListener('click', function () {
-      var txt = KB_TEMPLATES[sel.value] || '';
-      if (!txt) return;
-      note.value = (note.value ? note.value.replace(/\s+$/, '') + "\n\n" : '') + txt;
-      note.focus();
-    });
-  }
 });
 </script>
 

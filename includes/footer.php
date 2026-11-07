@@ -69,6 +69,12 @@
     <?php if (($activePage ?? '') === 'laporan.php'): ?>
     <script src="assets/js/reports.js"></script>
     <?php endif; ?>
+    <?php if (in_array($activePage ?? '', ['view_ticket.php', 'view_cr.php', 'view_task.php'], true)): ?>
+    <!-- Editor markdown + gambar untuk komentar / tindak lanjut -->
+    <script src="assets/vendor/toastui/toastui-editor-all.min.js"></script>
+    <script src="assets/js/helpdesk-markdown-editor.js"></script>
+    <script src="assets/js/comment-editor.js"></script>
+    <?php endif; ?>
     <?php endif; ?>
     <script src="assets/js/script.js"></script>
     <script src="assets/js/pwa-install.js"></script>

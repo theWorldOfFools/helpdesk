@@ -291,7 +291,7 @@ function crJenisBadge($jenis) {
 </div>
 
 <div class="modal fade" id="actionModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <form method="POST" action="cr_action.php" class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title" id="actionModalLabel">Tindak Lanjut</h5>
@@ -304,7 +304,8 @@ function crJenisBadge($jenis) {
         <p class="small mb-1"><span id="actionDesc" class="text-secondary"></span></p>
         <p class="small mb-2">Status saat ini: <span class="status-badge status-<?php echo $cr['status']; ?>"><?php echo e($cr['status']); ?></span> → Tujuan: <strong id="actionTo">-</strong></p>
         <label for="noteInput" class="form-label">Catatan wajib <span class="text-secondary">(min 10 karakter)</span></label>
-        <textarea name="note" id="noteInput" class="form-control" rows="4" required minlength="10" placeholder="Tulis apa yang dikerjakan / hasil pengecekan / langkah berikutnya…"></textarea>
+        <div class="form-text mb-1">Mendukung markdown dan gambar — tempel gambar (Ctrl+V) atau klik ikon gambar di toolbar.</div>
+        <textarea name="note" id="noteInput" class="form-control" rows="4" placeholder="Tulis apa yang dikerjakan / hasil pengecekan / langkah berikutnya…"></textarea>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Batal</button>
