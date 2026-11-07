@@ -126,10 +126,11 @@ psql -U postgres -d helpdesk_db -f migrations/020_drive.sql
 psql -U postgres -d helpdesk_db -f migrations/021_telegram.sql
 psql -U postgres -d helpdesk_db -f migrations/022_kb_shares.sql
 psql -U postgres -d helpdesk_db -f migrations/023_meetings.sql
+psql -U postgres -d helpdesk_db -f migrations/024_announcements.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→023 dari schema kosong.
-> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020`, `021`, `022`, `023` idempoten (`IF NOT EXISTS`) sehingga aman
+> Catatan: migrasi wajib dijalankan berurutan 001→024 dari schema kosong.
+> `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020`, `021`, `022`, `023`, `024` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
 > `uploads/change_requests/` writable.
@@ -192,6 +193,8 @@ helpdesk/
 ├── user_management.php     # Kelola pengguna + reset PW + log aktivitas (admin)
 ├── edit_user.php           # Edit nama/divisi/role + hapus pengguna (admin, guard data tertaut)
 ├── divisi.php              # Master Divisi: tambah/rename/nonaktif/hapus + hitungan pakai (admin)
+├── announcements.php       # Kelola pengumuman global + dialog setelah login (admin)
+├── announcement_dismiss.php # Simpan dismissal pengumuman 24 jam per user (POST+CSRF)
 ├── oncall.php              # Jadwal Oncall bulanan + import XLS/PNG (preview) + rotasi otomatis (kelola: admin, lihat: semua)
 ├── oncall_action.php       # Backend oncall: tambah/ubah/hapus/import/rotasi (admin, POST+CSRF)
 ├── oncall_template.php     # Download template XLS import oncall (Nama | Nomor tanggal)
@@ -244,13 +247,15 @@ helpdesk/
 │   ├── 020_drive.sql            # drive_folders + drive_files + drive_shares (IDEMPOTEN)
 │   ├── 021_telegram.sql         # integrasi notifikasi Telegram
 │   ├── 022_kb_shares.sql        # share artikel KB publik via token
-│   └── 023_meetings.sql         # meetings + meeting_attendees + meeting_notes (IDEMPOTEN)
+│   ├── 023_meetings.sql         # meetings + meeting_attendees + meeting_notes (IDEMPOTEN)
+│   └── 024_announcements.sql    # pengumuman global + dismissal 24 jam (IDEMPOTEN)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
 │   ├── drive_auth.php      # Helper Drive: canView/canEdit warisan + kuota + multi-upload
 │   ├── simrs_auth.php      # Helper SIMRS: koneksi read-only, verify HMAC+bcrypt, profil pegawai
 │   ├── cr_auth.php         # Helper CR: generateCrNumber/canViewCr/canActOnCr/upload
 │   ├── meeting_auth.php    # Helper rapat: token/URL, status, hak host/admin, query peserta & notulensi
+│   ├── announcement.php    # Helper pengumuman: query aktif per user + render isi
 │   ├── csrf.php            # CSRF token/verify
 │   ├── env.php             # Loader .env minimal
 │   ├── header.php          # Template + DataTables/Chart.js CDN
@@ -260,6 +265,7 @@ helpdesk/
 │   ├── vendor/qrcodejs/qrcode.min.js # Library QR lokal (tanpa CDN)
 │   └── js/
 │       ├── script.js
+│       ├── announcement-modal.js # Tampilkan dialog pengumuman + dismissal 24 jam
 │       ├── meeting-qr.js         # Render QR + salin link + share + download PNG
 │       ├── datatables-grids.js   # DataTables tiket/users/divisi/workload
 │       ├── dashboard-charts.js  # Chart.js + leaderboard fetch
@@ -309,6 +315,7 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, profil/password ikut SIMRS
 - Drive & Dokumen internal (`drive.php` + `drive_action.php` + `drive_download.php`, migrasi `020_drive.sql`): folder hierarkis maks 5 level + subfolder, upload multi-file (10 file/request, 50MB/file, 500MB/user), preview gambar/PDF, pencarian global, sharing privat/divisi/publik + share per-user (view/edit, menurun ke subfolder), download aman via cek hak, notifikasi saat di-share, audit `activity_log`
 - Undangan Rapat Digital (`meetings.php` + `meeting_invite.php` + `meeting_room.php`, migrasi `023_meetings.sql`): buat rapat (admin/teknisi, host = pembuat), QR + link undangan yang bisa diacak/dinonaktifkan, form peserta publik tanpa login (nama/instalasi/bagian/ruangan wajib), absensi + export CSV, notulensi feed kolaboratif host + peserta via token pribadi, kunci registrasi/notulensi terpisah, undangan cetak/PDF A5, library QR lokal tanpa CDN
+- Pengumuman Global (`announcements.php`, migrasi `024_announcements.sql`): admin membuat pengumuman rich-text (opsional berlaku sampai tanggal tertentu), pengumuman aktif tampil sebagai dialog ke seluruh user setelah login; user menutup dialog dan pengumuman tidak tampil lagi selama 24 jam per user (bisa aktif/nonaktif/hapus dari halaman admin)
 - **Perbaikan bug (18 Okt 2026):** share Drive `view` kini benar-benar read-only — hak share paling spesifik menang (share `view` di folder mengalahkan `edit` warisan) dan share `view` eksplisit mengikat semua penerima, termasuk admin. Detail + screenshot: [`docs/drive-share-view-only-fix.md`](docs/drive-share-view-only-fix.md)
 - Security: `.env`, CSRF semua POST, delete via POST, rate-limit login, session regenerate, ticket number anti-race
 
@@ -332,6 +339,18 @@ Migrasi:
 
 ```bash
 psql -U postgres -d helpdesk_db -f migrations/023_meetings.sql
+```
+
+### Pengumuman Global (Dialog Setelah Login)
+
+**Membuat pengumuman (admin):** buka menu **Mastering → Pengumuman**. Isi judul dan isi pengumuman (mendukung bold, list, link, dan gambar), tentukan tanggal **Berlaku Sampai** bila perlu, lalu simpan. Pengumuman yang aktif akan tampil sebagai dialog ke seluruh pengguna pada halaman berikutnya yang mereka buka setelah login.
+
+**Perilaku dialog:** dialog dapat ditutup lewat tombol X atau **Mengerti**. Saat ditutup, sistem menyimpan dismissal 24 jam per pengguna per pengumuman (`announcement_dismissals`), sehingga pengumuman tidak muncul lagi selama 24 jam. Setelah 24 jam, bila pengumuman masih aktif dan belum kedaluwarsa, dialog akan tampil kembali. Admin dapat menonaktifkan atau menghapus pengumuman kapan saja; pengumuman yang kedaluwarsa otomatis tidak ditampilkan.
+
+Migrasi:
+
+```bash
+psql -U postgres -d helpdesk_db -f migrations/024_announcements.sql
 ```
 
 ### Menambah Pengguna Baru

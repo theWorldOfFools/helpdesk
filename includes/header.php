@@ -30,7 +30,7 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <?php
-    $richEditorPages = ['create_ticket.php', 'edit_ticket.php', 'create_cr.php', 'edit_cr.php', 'create_task.php', 'edit_task.php', 'create_meeting.php', 'edit_meeting.php', 'view_meeting.php'];
+    $richEditorPages = ['create_ticket.php', 'edit_ticket.php', 'create_cr.php', 'edit_cr.php', 'create_task.php', 'edit_task.php', 'create_meeting.php', 'edit_meeting.php', 'view_meeting.php', 'announcements.php'];
     if (!empty($currentUser) && in_array($activePage, $richEditorPages, true)):
     ?>
     <link rel="stylesheet" href="assets/vendor/toastui/toastui-editor.min.css">
@@ -134,6 +134,9 @@ $roleBadge = ['admin' => 'text-bg-danger', 'teknisi' => 'text-bg-primary', 'pela
                         <i class="bi bi-hdd"></i> Drive & Dokumen
                     </a>
                     <p class="side-label">Mastering</p>
+                    <a href="announcements.php" class="nav-link side-link<?php echo side_link_active('announcements.php', $activePage); ?>">
+                        <i class="bi bi-megaphone"></i> Pengumuman
+                    </a>
                     <a href="user_management.php" class="nav-link side-link<?php echo side_link_active('user_management.php', $activePage); ?>">
                         <i class="bi bi-people"></i> Kelola Pengguna
                     </a>

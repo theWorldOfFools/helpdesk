@@ -1,10 +1,11 @@
 /* Service worker minimal: cache-first khusus aset statis same-origin.
    Halaman dinamis (PHP) TIDAK di-cache agar data sesi tidak basibasi/bocor. */
-const CACHE = 'helpdesk-v5';
+const CACHE = 'helpdesk-v6';
 const PRECACHE = [
   './assets/css/style.css',
   './assets/js/script.js',
   './assets/js/helpdesk-markdown-editor.js',
+  './assets/js/announcement-modal.js',
   './assets/js/meeting-qr.js',
   './assets/vendor/toastui/toastui-editor-all.min.js',
   './assets/vendor/toastui/toastui-editor.min.css',

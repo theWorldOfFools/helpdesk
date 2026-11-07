@@ -12,6 +12,49 @@
     <?php endif; ?>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <?php if (!empty($currentUser)): ?>
+    <?php
+    // Dialog pengumuman global: tampil untuk semua user yang login.
+    require_once __DIR__ . '/announcement.php';
+    $announcementConn = getDBConnection();
+    $announcementItems = getActiveAnnouncementsForUser($announcementConn, (int)$currentUser['id']);
+    pg_close($announcementConn);
+    ?>
+    <?php if (!empty($announcementItems)): ?>
+    <div class="modal fade" id="announcementModal" tabindex="-1" aria-labelledby="announcementModalLabel" aria-hidden="true"
+         data-bs-backdrop="static" data-bs-keyboard="false"
+         data-announcement-ids="<?php echo e(implode(',', array_map(function ($a) { return (int)$a['id']; }, $announcementItems))); ?>"
+         data-dismiss-url="announcement_dismiss.php">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white">
+                    <h2 class="modal-title h5 d-flex align-items-center gap-2" id="announcementModalLabel">
+                        <i class="bi bi-megaphone-fill"></i> Pengumuman
+                    </h2>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <?php foreach ($announcementItems as $announcementIndex => $announcement): ?>
+                        <?php if ($announcementIndex > 0): ?><hr class="my-4"><?php endif; ?>
+                        <article>
+                            <h3 class="h6 fw-bold mb-1"><?php echo e($announcement['judul']); ?></h3>
+                            <?php if (!empty($announcement['created_at'])): ?>
+                            <div class="small text-secondary mb-2">
+                                <i class="bi bi-clock me-1"></i><?php echo date('d M Y H:i', strtotime($announcement['created_at'])); ?>
+                            </div>
+                            <?php endif; ?>
+                            <div class="announcement-content"><?php echo renderAnnouncementBody($announcement['isi']); ?></div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+                <div class="modal-footer justify-content-between align-items-center">
+                    <small class="text-secondary"><i class="bi bi-info-circle me-1"></i>Tidak akan tampil lagi selama 24 jam.</small>
+                    <button type="button" class="btn btn-danger" data-bs-dismiss="modal">Mengerti</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="assets/js/announcement-modal.js"></script>
+    <?php endif; ?>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/2.1.8/js/dataTables.bootstrap5.min.js"></script>

@@ -215,6 +215,12 @@
 .task-card.dragging { opacity: .45; cursor: grabbing; }
 [data-drop-phase].drop-hint { outline: 2px dashed var(--bs-primary); outline-offset: -2px; border-radius: 8px; }
 
+/* ===== Pengumuman global ===== */
+.announcement-content { overflow-wrap: anywhere; }
+.announcement-content img { max-width: 100%; height: auto; border-radius: .5rem; }
+.announcement-content > :last-child { margin-bottom: 0; }
+.announcement-content table { width: 100%; }
+
 /* ===== Login (sisa custom di luar Bootstrap utilities) ===== */
 .guest-wrap { min-height: 100vh; }
 .login-page {
