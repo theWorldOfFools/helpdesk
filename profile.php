@@ -17,14 +17,6 @@ unset($_SESSION['flash_warn']);
 // (disimpan sebagai override lokal agar tidak ditimpa sinkronisasi login berikutnya).
 $isSimrsUser = (($user['auth_source'] ?? 'local') === 'simrs');
 
-// Pilihan divisi dari master (divisi.php). Nilai lama yang sudah nonaktif tetap
-// ditampilkan agar tidak hilang saat user menyimpan perubahan lain.
-$divisions = getActiveDivisions($conn);
-$currentDivision = trim((string)($user['division'] ?? ''));
-if ($currentDivision !== '' && !in_array($currentDivision, $divisions, true)) {
-    $divisions[] = $currentDivision;
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrf();
     $act = $_POST['act'] ?? '';
@@ -57,9 +49,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'danger';
         } elseif (mb_strlen($name) > 100 || mb_strlen($division) > 100) {
             $message = 'Nama/divisi maksimal 100 karakter.';
-            $messageType = 'danger';
-        } elseif ($division !== '' && !in_array($division, $divisions, true)) {
-            $message = 'Divisi tidak valid. Pilih dari daftar divisi yang tersedia.';
             $messageType = 'danger';
         } else {
             if ($isSimrsUser) {
@@ -148,15 +137,8 @@ $tgBot = tgConfig()['username'] ?? '';
             <div class="mb-3"><label class="form-label">Username</label><input class="form-control" value="<?php echo e($user['username']); ?>" disabled></div>
             <div class="mb-3"><label class="form-label">Role</label><input class="form-control" value="<?php echo e($user['role']); ?>" disabled></div>
             <div class="mb-3"><label class="form-label" for="pfName">Nama Lengkap</label><input class="form-control" id="pfName" name="name" required maxlength="100" value="<?php echo e($user['name']); ?>" <?php echo $isSimrsUser ? 'disabled' : ''; ?>></div>
-            <div class="mb-3">
-                <label class="form-label" for="pfDiv">Divisi</label>
-                <select class="form-select" id="pfDiv" name="division">
-                    <option value="">— Tidak ditentukan —</option>
-                    <?php foreach ($divisions as $div): ?>
-                        <option value="<?php echo e($div); ?>" <?php echo ((string)($user['division'] ?? '') === $div) ? 'selected' : ''; ?>><?php echo e($div); ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <div class="form-text"><?php echo $isSimrsUser ? 'Divisi helpdesk boleh berbeda dari unit SIMRS.' : 'Daftar divisi dikelola admin di Master Divisi.'; ?></div>
+            <div class="mb-3"><label class="form-label" for="pfDiv">Divisi</label><input class="form-control" id="pfDiv" name="division" maxlength="100" value="<?php echo e($user['division'] ?? ''); ?>">
+                <?php if ($isSimrsUser): ?><div class="form-text">Divisi helpdesk boleh berbeda dari unit SIMRS.</div><?php endif; ?>
             </div>
             <button class="btn btn-primary" type="submit">Simpan</button>
         </form>
