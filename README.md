@@ -127,9 +127,10 @@ psql -U postgres -d helpdesk_db -f migrations/021_telegram.sql
 psql -U postgres -d helpdesk_db -f migrations/022_kb_shares.sql
 psql -U postgres -d helpdesk_db -f migrations/023_meetings.sql
 psql -U postgres -d helpdesk_db -f migrations/024_announcements.sql
+psql -U postgres -d helpdesk_db -f migrations/025_user_division_override.sql
 ```
 
-> Catatan: migrasi wajib dijalankan berurutan 001→024 dari schema kosong.
+> Catatan: migrasi wajib dijalankan berurutan 001→025 dari schema kosong.
 > `011`, `012`, `013`, `014`, `016`, `017`, `018`, `019`, `020`, `021`, `022`, `023`, `024` idempoten (`IF NOT EXISTS`) sehingga aman
 > dijalankan ulang di database lama. Setelah migrasi, buka form di
 > `create_cr.php` (login dulu) dan pastikan folder
@@ -207,7 +208,7 @@ helpdesk/
 ├── meeting_export.php      # Export CSV absensi peserta
 ├── meeting_invite.php      # Halaman undangan publik + form peserta (tanpa login)
 ├── meeting_room.php        # Ruang notulensi peserta via token pribadi (tanpa login)
-├── profile.php             # Profil + ganti password (semua role)
+├── profile.php             # Profil (nama/divisi) + ganti password (semua role)
 ├── kb.php                  # Basis solusi (semua role)
 ├── kb_manage.php           # Kelola artikel + template jawaban (admin/teknisi)
 ├── drive.php               # Drive & Dokumen: browser folder + upload + share (semua role)
@@ -248,7 +249,8 @@ helpdesk/
 │   ├── 021_telegram.sql         # integrasi notifikasi Telegram
 │   ├── 022_kb_shares.sql        # share artikel KB publik via token
 │   ├── 023_meetings.sql         # meetings + meeting_attendees + meeting_notes (IDEMPOTEN)
-│   └── 024_announcements.sql    # pengumuman global + dismissal 24 jam (IDEMPOTEN)
+│   ├── 024_announcements.sql    # pengumuman global + dismissal 24 jam (IDEMPOTEN)
+│   └── 025_user_division_override.sql # divisi helpdesk akun SIMRS bisa diubah via Profil (IDEMPOTEN)
 ├── includes/
 │   ├── auth.php            # Auth middleware & permission functions
 │   ├── drive_auth.php      # Helper Drive: canView/canEdit warisan + kuota + multi-upload
@@ -294,8 +296,9 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 3. Perilaku: username yang ada di `loginpemakai_k` diverifikasi live (HMAC-SHA256 + bcrypt);
    sukses = dibuatkan baris `users` lokal otomatis sebagai **pelapor** (nama/divisi dari
    pegawai+ruangan, refresh tiap login, role tidak pernah ditimpa). Promosi admin/teknisi
-   manual via Manajemen Pengguna (aksi Set Role). Profil & password user SIMRS ikut SIMRS.
-   Akun lokal (mis. admin darurat) tetap bisa login seperti biasa.
+   manual via Manajemen Pengguna (aksi Set Role). Nama & password user SIMRS ikut SIMRS,
+   tetapi divisi helpdesk bisa disesuaikan sendiri lewat menu Profil (override lokal,
+   tidak ditimpa saat login berikutnya). Akun lokal (mis. admin darurat) tetap bisa login seperti biasa.
 
 ## Fitur Baru
 
@@ -313,7 +316,7 @@ Helpdesk bisa memverifikasi user langsung ke database SIMRS (PostgreSQL, read-on
 - DataTables server-side di semua tabel (fallback PHP bila CDN offline)
 - Dashboard Chart.js per-role + leaderboard teknisi (skor cepat+banyak) & pelapor (bulanan)
 - Change Request end-to-end (terpisah dari tiket): buat + tabel dinamis Jenis Perubahan (Penambahan/Perubahan/Design, 1–20 baris), daftar + API server-side, detail + tindak lanjut + diskusi/riwayat, edit/hapus admin, nomor CR-YYYYMM-XXXX anti-race, SLA jam kerja, notifikasi, widget dashboard + laporan + export
-- Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, profil/password ikut SIMRS
+- Login via SIMRS (opsional, PostgreSQL): verifikasi live HMAC-SHA256+bcrypt replika SIMRS (read-only), JIT provisioning sebagai pelapor, divisi dari ruangan, promosi admin/teknisi manual, nama/password ikut SIMRS, divisi helpdesk bisa diubah via Profil (override lokal)
 - Drive & Dokumen internal (`drive.php` + `drive_action.php` + `drive_download.php`, migrasi `020_drive.sql`): folder hierarkis maks 5 level + subfolder, upload multi-file (10 file/request, 50MB/file, 500MB/user), preview gambar/PDF, pencarian global, sharing privat/divisi/publik + share per-user (view/edit, menurun ke subfolder), download aman via cek hak, notifikasi saat di-share, audit `activity_log`
 - Undangan Rapat Digital (`meetings.php` + `meeting_invite.php` + `meeting_room.php`, migrasi `023_meetings.sql`): buat rapat (admin/teknisi, host = pembuat), QR + link undangan yang bisa diacak/dinonaktifkan, form peserta publik tanpa login (nama/instalasi/bagian/ruangan wajib), absensi + export CSV, notulensi feed kolaboratif host + peserta via token pribadi, kunci registrasi/notulensi terpisah, undangan cetak/PDF A5, library QR lokal tanpa CDN
 - Pengumuman Global (`announcements.php`, migrasi `024_announcements.sql`): admin membuat pengumuman rich-text (opsional berlaku sampai tanggal tertentu), pengumuman aktif tampil sebagai dialog ke seluruh user setelah login; user menutup dialog dan pengumuman tidak tampil lagi selama 24 jam per user (bisa aktif/nonaktif/hapus dari halaman admin)

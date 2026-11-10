@@ -93,10 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } elseif (($user['is_active'] === 'f' || $user['is_active'] == 0 || $user['is_active'] === false) && !$isNew) {
                     $message = 'Akun Anda dinonaktifkan di helpdesk. Hubungi admin.';
                 } else {
-                    // Refresh profil dari SIMRS; role dipertahankan (promosi manual tidak ke-reset)
+                    // Refresh profil dari SIMRS; role dipertahankan (promosi manual tidak ke-reset).
+                    // Divisi helpdesk yang sudah diubah user via Profil (division_override) tidak ditimpa;
+                    // unit_kerja tetap menyimpan nilai terbaru dari SIMRS.
                     pg_query_params(
                         $conn,
-                        "UPDATE users SET name=$1, division=$2, jabatan=$3, unit_kerja=$4, external_id=$5, auth_source='simrs', last_sync_at=NOW() WHERE id=$6",
+                        "UPDATE users SET name=$1, division=CASE WHEN division_override THEN division ELSE $2 END, jabatan=$3, unit_kerja=$4, external_id=$5, auth_source='simrs', last_sync_at=NOW() WHERE id=$6",
                         [$display, $division, $jabatan, $division, $extId, $user['id']]
                     );
                     logActivity($conn, $user['id'], 'login_simrs', 'Login via SIMRS' . ($isNew ? ' (akun baru)' : ''));

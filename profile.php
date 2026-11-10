@@ -13,8 +13,17 @@ $messageType = '';
 $force = isset($_GET['force']) && $_GET['force'] === '1';
 $warn = $_SESSION['flash_warn'] ?? null;
 unset($_SESSION['flash_warn']);
-// Akun SIMRS: profil + password mengikuti DB SIMRS (read-only di helpdesk)
+// Akun SIMRS: nama & password mengikuti DB SIMRS; divisi helpdesk bisa disesuaikan
+// (disimpan sebagai override lokal agar tidak ditimpa sinkronisasi login berikutnya).
 $isSimrsUser = (($user['auth_source'] ?? 'local') === 'simrs');
+
+// Pilihan divisi dari master (divisi.php). Nilai lama yang sudah nonaktif tetap
+// ditampilkan agar tidak hilang saat user menyimpan perubahan lain.
+$divisions = getActiveDivisions($conn);
+$currentDivision = trim((string)($user['division'] ?? ''));
+if ($currentDivision !== '' && !in_array($currentDivision, $divisions, true)) {
+    $divisions[] = $currentDivision;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     requireCsrf();
@@ -33,22 +42,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         logActivity($conn, $user['id'], 'telegram_unlink', 'Putus via profil');
         $message = 'Tautan Telegram diputus.';
         $messageType = 'success';
-    } elseif ($isSimrsUser) {
-        $message = 'Akun SIMRS: nama, divisi, dan password mengikuti data SIMRS dan tidak bisa diubah di sini.';
+    } elseif ($isSimrsUser && $act === 'password') {
+        $message = 'Akun SIMRS: password mengikuti data SIMRS dan tidak bisa diubah di sini.';
         $messageType = 'info';
     } elseif ($act === 'info') {
         $name = trim($_POST['name'] ?? '');
         $division = trim($_POST['division'] ?? '');
-        if ($name === '') {
+        if ($isSimrsUser) {
+            // Nama tetap mengikuti SIMRS; hanya divisi helpdesk yang boleh diubah.
+            $name = $user['name'];
+        }
+        if (!$isSimrsUser && $name === '') {
             $message = 'Nama lengkap wajib diisi.';
             $messageType = 'danger';
+        } elseif (mb_strlen($name) > 100 || mb_strlen($division) > 100) {
+            $message = 'Nama/divisi maksimal 100 karakter.';
+            $messageType = 'danger';
+        } elseif ($division !== '' && !in_array($division, $divisions, true)) {
+            $message = 'Divisi tidak valid. Pilih dari daftar divisi yang tersedia.';
+            $messageType = 'danger';
         } else {
-            $r = pg_query_params($conn, "UPDATE users SET name = $1, division = $2 WHERE id = $3", [$name, $division !== '' ? $division : null, $user['id']]);
+            if ($isSimrsUser) {
+                $r = pg_query_params($conn, "UPDATE users SET division = $1, division_override = TRUE WHERE id = $2", [$division !== '' ? $division : null, $user['id']]);
+            } else {
+                $r = pg_query_params($conn, "UPDATE users SET name = $1, division = $2 WHERE id = $3", [$name, $division !== '' ? $division : null, $user['id']]);
+            }
             if ($r) {
-                $_SESSION['name'] = $name;
+                if (!$isSimrsUser) $_SESSION['name'] = $name;
                 $user = getCurrentUser();
-                logActivity($conn, $user['id'], 'profile_update', 'Ubah profil');
-                $message = 'Profil diperbarui.';
+                logActivity($conn, $user['id'], 'profile_update', $isSimrsUser ? 'Ubah divisi helpdesk' : 'Ubah profil');
+                $message = $isSimrsUser ? 'Divisi helpdesk berhasil diperbarui.' : 'Profil diperbarui.';
                 $messageType = 'success';
             } else {
                 $message = 'Gagal: ' . pg_last_error($conn);
@@ -118,14 +141,23 @@ $tgBot = tgConfig()['username'] ?? '';
 <div class="row g-3">
     <div class="col-lg-6"><div class="card h-100"><div class="card-body">
         <h3 class="h6">Data Diri</h3>
-        <?php if ($isSimrsUser): ?><div class="alert alert-info small py-2">Akun SIMRS — nama & divisi disinkron dari SIMRS setiap login.</div><?php endif; ?>
+        <?php if ($isSimrsUser): ?><div class="alert alert-info small py-2">Akun SIMRS — nama mengikuti SIMRS. Divisi dapat disesuaikan khusus untuk helpdesk dan tidak ditimpa saat login berikutnya.</div><?php endif; ?>
         <form method="POST">
             <?php echo csrf_field(); ?>
             <input type="hidden" name="act" value="info">
             <div class="mb-3"><label class="form-label">Username</label><input class="form-control" value="<?php echo e($user['username']); ?>" disabled></div>
             <div class="mb-3"><label class="form-label">Role</label><input class="form-control" value="<?php echo e($user['role']); ?>" disabled></div>
-            <div class="mb-3"><label class="form-label" for="pfName">Nama Lengkap</label><input class="form-control" id="pfName" name="name" required maxlength="100" value="<?php echo e($user['name']); ?>"></div>
-            <div class="mb-3"><label class="form-label" for="pfDiv">Divisi</label><input class="form-control" id="pfDiv" name="division" maxlength="100" value="<?php echo e($user['division'] ?? ''); ?>"></div>
+            <div class="mb-3"><label class="form-label" for="pfName">Nama Lengkap</label><input class="form-control" id="pfName" name="name" required maxlength="100" value="<?php echo e($user['name']); ?>" <?php echo $isSimrsUser ? 'disabled' : ''; ?>></div>
+            <div class="mb-3">
+                <label class="form-label" for="pfDiv">Divisi</label>
+                <select class="form-select" id="pfDiv" name="division">
+                    <option value="">— Tidak ditentukan —</option>
+                    <?php foreach ($divisions as $div): ?>
+                        <option value="<?php echo e($div); ?>" <?php echo ((string)($user['division'] ?? '') === $div) ? 'selected' : ''; ?>><?php echo e($div); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="form-text"><?php echo $isSimrsUser ? 'Divisi helpdesk boleh berbeda dari unit SIMRS.' : 'Daftar divisi dikelola admin di Master Divisi.'; ?></div>
+            </div>
             <button class="btn btn-primary" type="submit">Simpan</button>
         </form>
     </div></div></div>
